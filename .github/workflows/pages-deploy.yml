@@ -1,6 +1,9 @@
 # Deploy Portico Admin to GitHub Pages (project site: /portico-admin/).
-# Triggers: push to main, workflow_dispatch on main only — never pull_request / pull_request_target.
-# This PR adds workflow code only; merge does not by itself require immediate dispatch (no deploy in PR CI).
+# Triggers: push to main (including merge commits), workflow_dispatch on main only.
+# Never pull_request / pull_request_target — PR validation uses ci.yml only.
+#
+# Merging this workflow to main produces a push event and WILL attempt deploy
+# (if Settings → Pages source is GitHub Actions). PR runs do not execute this file.
 
 name: Deploy GitHub Pages
 
@@ -9,7 +12,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Default read-only; deploy job escalates only pages + OIDC.
 permissions:
   contents: read
 
@@ -23,8 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,10 +40,12 @@ jobs:
       - run: npm run smoke:pages
         env:
           VITE_BASE_PATH: /portico-admin/
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      # Generic artifact — no Pages/OIDC scopes during build (upload-pages-artifact needs pages:write).
+      - uses: actions/upload-artifact@v4
         with:
+          name: portico-admin-pages-dist
           path: dist
+          if-no-files-found: error
 
   deploy:
     if: github.ref == 'refs/heads/main'
@@ -53,12 +55,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     permissions:
-      contents: read
       pages: write
       id-token: write
     concurrency:
       group: pages-deploy
       cancel-in-progress: false
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: portico-admin-pages-dist
+          path: dist
+      # configure-pages: metadata only (no site enablement); requires OIDC/Pages token from deploy job.
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4

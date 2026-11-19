@@ -24,6 +24,17 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  workflow-lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
   pages-preview-smoke:
     runs-on: ubuntu-latest
     permissions:

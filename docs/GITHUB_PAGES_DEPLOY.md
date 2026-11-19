@@ -1,16 +1,18 @@
-# GitHub Pages 正式部署工作流（代码就绪，PR 不触发部署）
+# GitHub Pages 正式部署工作流
 
 ## 触发与权限
 
 | 工作流 | 触发 | 部署 |
 | --- | --- | --- |
-| `ci.yml` | `pull_request`、`push` → `main` | **否**（仅 verify + pages-preview-smoke） |
-| `pages-deploy.yml` | `push` → `main`、`workflow_dispatch` | **是**（仅当 `ref == refs/heads/main`） |
+| `ci.yml` | `pull_request`、`push` → `main` | **否**（verify + pages-preview-smoke + actionlint） |
+| `pages-deploy.yml` | `push` → `main`（**含 merge 入 main 的 push**）、`workflow_dispatch` | **尝试**（仅 `refs/heads/main`） |
 | `pages-preview-proposal.yml` | 仅 `workflow_dispatch`（历史提案） | **否** |
 
-- **无** `pull_request_target`；PR 不在不可信 head 上授予 `pages:write`。
-- `pages-deploy.yml`：`build-and-verify` 仅 `contents: read`；`deploy` 作业 `pages: write` + `id-token: write`。
-- `workflow_dispatch` 在非 `main` ref 上：各 job `if: github.ref == 'refs/heads/main'` → **跳过，不部署**。
+- **无** `pull_request_target`；**`pages-deploy.yml` 不在 PR 上运行**。
+- **`build-and-verify`**：全程仅 `contents: read`；产物用 `actions/upload-artifact`（非 Pages OIDC）。
+- **`deploy`**：仅此 job 持有 `pages: write` + `id-token: write`（无 `contents`）；在此执行 `configure-pages`、`upload-pages-artifact`、`deploy-pages`。
+- 官方 `upload-pages-artifact` 需 Pages/OIDC 写权限，故不在 build job 调用（见 [upload-pages-artifact](https://github.com/actions/upload-pages-artifact)）。
+- `workflow_dispatch` 在非 `main` ref：job `if` 跳过。
 
 ## 同 revision 门禁
 
@@ -18,14 +20,15 @@
 
 1. `npm ci` → `typecheck` → `test`
 2. `VITE_BASE_PATH=/portico-admin/` build + `404.html`
-3. `smoke:pages`（与 CI `pages-preview-smoke` 同脚本）
-4. `configure-pages` → `upload-pages-artifact`
-5. `deploy-pages` → `environment.url` = `steps.deployment.outputs.page_url`
+3. `smoke:pages`
+4. `upload-artifact`（dist）
+5. `download-artifact` → `configure-pages` → `upload-pages-artifact` → `deploy-pages` → `page_url`
 
-## 仓库侧前提（人工，本 PR 不代为点击）
+## merge 与部署行为
 
-- GitHub **Settings → Pages**：Source = **GitHub Actions**（启用后 `main` 上首次成功 deploy 才会产生 `page_url`）。
-- 本 Agent **未**执行 `workflow_dispatch`，**未**在 PR 分支产生真实 deployment。
+**合并本 PR 到 `main` 会产生 `push` 事件，`pages-deploy.yml` 将自动运行并尝试部署**（不等同于产品上线签收）。若 **Settings → Pages** 源未设为 GitHub Actions，`deploy` 可能失败直至人工配置。
+
+本补丁 PR 阶段：**未** merge、**未** `workflow_dispatch`、**未** 改 Pages 设置 → **无真实对外部署**；授权方需在 merge 后自行验证 `page_url`。
 
 ## 路径
 
