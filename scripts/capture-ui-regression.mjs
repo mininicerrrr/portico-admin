@@ -5,17 +5,19 @@
 import { chromium } from 'playwright'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { createPorticoUiResponseCollector, hashInstalledPorticoUi } from './runtime-package-proof.mjs'
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? 'http://127.0.0.1:5173'
 const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
-const CANDIDATE_REF = 'f84d4bd'
-const TAG = CANDIDATE_REF
+const TAG = 'b72f034'
 const TARBALL_SHA256 =
-  'cb01d7eccf4ecfe438c0b89bb6c5ac723a2071f309b503d6d7db0974488ad7fa'
-const TARBALL_NAME = 'portico-ui-0.1.0_a58a.tgz'
-const PORTICO_UI_IMPLEMENTATION_SHA = 'f84d4bd76e76daa7ead98d4b7a5fe0b442fecc78'
-const PORTICO_UI_BRANCH_HEAD_SHA = 'fb0916777b40becdca1f39e4d12b16559e57de01'
+  '9bba3c4842f569b8bd3b17fc7fd731cd35244fc5bef3a31e350f17658d87befd'
+const TARBALL_NAME = 'portico-ui-0.1.1_a95f.tgz'
+const PORTICO_UI_IMPLEMENTATION_SHA = 'b72f0341e537881640795d2d4e2e48d6dcd425c8'
+const PORTICO_UI_PREPARED_VERSION = '0.1.1'
+const TRACKED_NPM_DEPENDENCY = 'portico-ui@0.1.0'
 const ADMIN_BRANCH = 'cursor/portico-admin-v1-1deb'
+const SKELETON_INTEGRATION = 'not_applicable'
 
 const DESKTOP = { width: 1440, height: 1000 }
 const NARROW = { width: 390, height: 844 }
@@ -154,6 +156,48 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(outDir, name), fullPage: false })
 }
 
+async function assertCleanUsersBaseline(page) {
+  return page.evaluate(() => {
+    const drawer = document.querySelector('.pt-drawer.is-visible, .pt-drawer.is-open')
+    const overlay = document.querySelector('.pt-drawer__overlay')
+    const overlayVisible =
+      overlay &&
+      getComputedStyle(overlay).display !== 'none' &&
+      Number(getComputedStyle(overlay).opacity) > 0.05
+    const navBackdrop = document.querySelector('.admin-sidebar-backdrop')
+    const navOpen =
+      document.querySelector('.admin-sidebar.is-open') != null ||
+      (navBackdrop && getComputedStyle(navBackdrop).opacity !== '0')
+    return {
+      ok: !drawer && !overlayVisible && !navOpen,
+      drawerOpen: !!drawer,
+      drawerOverlayVisible: !!overlayVisible,
+      mobileNavOpen: !!navOpen,
+    }
+  })
+}
+
+async function checkSortableHeaderKeyboard(page) {
+  const th = page.locator('.pt-table th.is-sortable').first()
+  await th.waitFor({ state: 'visible' })
+  const before = await th.getAttribute('aria-sort')
+  await th.focus()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(120)
+  const afterEnter = await th.getAttribute('aria-sort')
+  await page.keyboard.press(' ')
+  await page.waitForTimeout(120)
+  const afterSpace = await th.getAttribute('aria-sort')
+  return {
+    focusable: await th.evaluate((el) => el === document.activeElement || el.contains(document.activeElement)),
+    before,
+    afterEnter,
+    afterSpace,
+    sortChanged: before !== afterEnter || afterEnter !== afterSpace,
+    tabindex: await th.getAttribute('tabindex'),
+  }
+}
+
 function sampleButtonContrastFromPage() {
   return (el) => {
     const cs = getComputedStyle(el)
@@ -236,11 +280,39 @@ async function readVisibleTooltipPanel(page) {
   })
 }
 
-async function checkTableOverflowTooltip(page) {
-  const emailTrigger = page.locator('.pt-table tbody tr:first-child td:nth-child(2) .pt-table__cell').first()
-  await emailTrigger.waitFor({ state: 'visible', timeout: 15_000 })
+async function findOverflowFocusableCell(page) {
+  const cell = page.locator('.pt-table .pt-table__cell--overflow-focusable').first()
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if ((await cell.count()) > 0) return cell
+    await page.waitForTimeout(350)
+  }
+  return null
+}
 
-  await emailTrigger.hover()
+async function checkTableOverflowTooltip(page) {
+  await page.waitForTimeout(200)
+  const probeCell = page.locator('.pt-table tbody tr:first-child .pt-table__cell').nth(1)
+  await probeCell.evaluate((el) => {
+    el.style.maxWidth = '120px'
+    el.style.overflow = 'hidden'
+    el.style.textOverflow = 'ellipsis'
+    el.style.whiteSpace = 'nowrap'
+    el.dispatchEvent(new Event('resize'))
+  })
+  await page.waitForTimeout(600)
+  const overflowCell = (await findOverflowFocusableCell(page)) ?? probeCell
+  const a11yProbeNote =
+    'Harness narrows one table cell to exercise overflow-focusable + tooltip keyboard; not an app layout change.'
+  if (!overflowCell) {
+    return {
+      skipped: true,
+      reason: 'no overflow-focusable cells after ResizeObserver (demo data may fit column widths)',
+      documentedDelaysMs: { showAfter: TOOLTIP_SHOW_AFTER_MS, hideAfter: TOOLTIP_HIDE_AFTER_MS },
+    }
+  }
+  await overflowCell.waitFor({ state: 'visible', timeout: 15_000 })
+
+  await overflowCell.hover()
   await page.waitForTimeout(TOOLTIP_SHOW_AFTER_MS + 120)
   const hover = await readVisibleTooltipPanel(page)
 
@@ -256,29 +328,60 @@ async function checkTableOverflowTooltip(page) {
   const afterPointerLeave = await readVisibleTooltipPanel(page)
   const closesOnLeave = !afterPointerLeave.panelVisible
 
-  const focusReport = await emailTrigger.evaluate((el) => {
-    el.focus()
-    return {
-      focusable: el.tabIndex >= 0 || el.getAttribute('tabindex') != null,
-      activeTag: document.activeElement?.tagName ?? null,
-      activeClass: document.activeElement?.className ?? null,
-      activeIsCell: document.activeElement?.classList?.contains('pt-table__cell') ?? false,
+  let keyboardOverflow = { skipped: true, reason: 'no overflow-focusable cell' }
+  if (overflowCell) {
+    await overflowCell.focus()
+    await page.waitForTimeout(TOOLTIP_SHOW_AFTER_MS + 200)
+    const focusMeta = await overflowCell.evaluate((el) => {
+      const trigger = el.closest('.pt-tooltip')
+      const describedBy = trigger?.getAttribute('aria-describedby') ?? null
+      const panel = describedBy ? document.getElementById(describedBy) : null
+      const panelVisible = (() => {
+        if (!panel) return false
+        const cs = getComputedStyle(panel)
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false
+        const r = panel.getBoundingClientRect()
+        return r.width > 0.5 && r.height > 0.5
+      })()
+      return {
+        focusable: el.tabIndex >= 0,
+        activeIsCell: document.activeElement === el,
+        ariaDescribedBy: describedBy,
+        panelId: panel?.id ?? null,
+        panelVisible,
+        panelRole: panel?.getAttribute('role') ?? null,
+      }
+    })
+    const popupOnFocus = await readVisibleTooltipPanel(page)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(120)
+    const afterEscape = await readVisibleTooltipPanel(page)
+    await overflowCell.evaluate((el) => el.blur())
+    await page.waitForTimeout(TOOLTIP_LEAVE_WAIT_MS)
+    const afterBlur = await readVisibleTooltipPanel(page)
+    keyboardOverflow = {
+      skipped: false,
+      ...focusMeta,
+      popupOnFocus,
+      closesOnEscape: !afterEscape.panelVisible,
+      closesOnBlur: !afterBlur.panelVisible,
     }
-  })
-  await page.waitForTimeout(TOOLTIP_SHOW_AFTER_MS + 200)
-  const afterFocus = await readVisibleTooltipPanel(page)
+  }
 
   return {
+    a11yProbeNote,
     documentedDelaysMs: { showAfter: TOOLTIP_SHOW_AFTER_MS, hideAfter: TOOLTIP_HIDE_AFTER_MS },
     leaveWaitMs: TOOLTIP_LEAVE_WAIT_MS,
     hover,
     afterScrollWhileHovered,
     afterPointerLeave: { ...afterPointerLeave, closesOnLeave },
-    keyboardFocus: { ...focusReport, popup: afterFocus },
+    keyboardOverflow,
     assertionNote:
       'Panel nodes stay in DOM with v-show; visibility uses getBoundingClientRect + computed style, not querySelector presence.',
   }
 }
+
+const installedProof = await hashInstalledPorticoUi()
 
 const browser = await chromium.launch()
 const context = await browser.newContext({
@@ -287,6 +390,7 @@ const context = await browser.newContext({
   deviceScaleFactor: DEVICE_SCALE_FACTOR,
 })
 const page = await context.newPage()
+const responseCollector = createPorticoUiResponseCollector(page)
 await mkdir(outDir, { recursive: true })
 
 try {
@@ -301,8 +405,22 @@ try {
   const lightOverlap = await assertNoEmailOverlap(page)
   if (!lightOverlap.ok) issue('error', 'table-layout', `desktop light: ${lightOverlap.reason}`)
 
+  const cleanBaseline = await assertCleanUsersBaseline(page)
+  if (!cleanBaseline.ok) {
+    issue('error', 'screenshot-baseline', `users 页存在遮罩/抽屉: ${JSON.stringify(cleanBaseline)}`)
+  } else {
+    await shot(page, `candidate-users-light-${TAG}.png`)
+  }
+
+  const sortKeyboard = await checkSortableHeaderKeyboard(page)
+  if (!sortKeyboard.sortChanged) {
+    issue('warn', 'table-sort-keyboard', `Enter/Space 未改变 aria-sort: ${JSON.stringify(sortKeyboard)}`)
+  }
+
   const tooltipCheck = await checkTableOverflowTooltip(page)
-  if (!tooltipCheck.hover?.panelVisible) {
+  if (tooltipCheck.skipped) {
+    issue('warn', 'tooltip', `overflow tooltip 路径未触达: ${tooltipCheck.reason}`)
+  } else if (!tooltipCheck.hover?.panelVisible) {
     issue(
       'warn',
       'tooltip',
@@ -319,14 +437,21 @@ try {
     )
   }
   if (
-    tooltipCheck.keyboardFocus.popup?.panelVisible &&
-    !tooltipCheck.keyboardFocus.popup.inViewport
+    tooltipCheck.keyboardOverflow &&
+    !tooltipCheck.keyboardOverflow.skipped &&
+    tooltipCheck.keyboardOverflow.panelVisible &&
+    tooltipCheck.keyboardOverflow.popupOnFocus &&
+    !tooltipCheck.keyboardOverflow.popupOnFocus.inViewport
   ) {
-    issue(
-      'error',
-      'tooltip',
-      `focus 弹出层可见但不在视口: ${JSON.stringify(tooltipCheck.keyboardFocus)}`,
-    )
+    issue('error', 'tooltip', `overflow 键盘 focus 弹出层不在视口: ${JSON.stringify(tooltipCheck.keyboardOverflow)}`)
+  }
+  if (
+    tooltipCheck.keyboardOverflow &&
+    !tooltipCheck.keyboardOverflow.skipped &&
+    tooltipCheck.keyboardOverflow.panelVisible &&
+    !tooltipCheck.keyboardOverflow.closesOnEscape
+  ) {
+    issue('error', 'tooltip', `Escape 未关闭 overflow tooltip: ${JSON.stringify(tooltipCheck.keyboardOverflow)}`)
   }
 
   const primaryContrast = await checkPrimaryButtonContrast(page)
@@ -347,8 +472,6 @@ try {
     await page.locator('.pt-drawer button:has-text("取消")').first().click()
     await page.waitForTimeout(300)
   }
-
-  await shot(page, `candidate-users-light-${TAG}.png`)
 
   await setTheme(page, 'dark')
   await page.reload({ waitUntil: 'networkidle' })
@@ -393,21 +516,23 @@ try {
   const viewport = page.viewportSize()
   const evidence = {
     packageIdentity: {
-      candidateRef: CANDIDATE_REF,
+      preparedVersion: PORTICO_UI_PREPARED_VERSION,
+      preparedVersionPublic: false,
       tarballSha256: TARBALL_SHA256,
       tarballFile: TARBALL_NAME,
-      tarballSha256Verified: true,
       implementationSourceCommitSha: PORTICO_UI_IMPLEMENTATION_SHA,
-      porticoUiBranchHeadCommitSha: PORTICO_UI_BRANCH_HEAD_SHA,
-      branchHeadNote: 'branch head is capture/manifest scripts only after implementation SHA',
+      trackedNpmDependency: TRACKED_NPM_DEPENDENCY,
     },
-    supersedesPriorCandidates: ['b1901ae', 'cd9a003'],
+    supersedesPriorCandidates: ['f84d4bd', 'cb01d7ec…0.1.0 tarball'],
+    installedNodeModules: installedProof,
+    browserLoadedPorticoUi: responseCollector.getCaptured(),
+    skeletonIntegration: SKELETON_INTEGRATION,
     npmPackagePublic: false,
     finalVerificationComplete: false,
     visualSignOff: false,
     productApproval: false,
     designerVisualAudit:
-      'targeted review: visible blockers cleared for USER review (not user final approval / merge / release / npm)',
+      'P2 candidate; Lead independent re-review in progress — not user final approval / merge / release / npm',
     viewport: {
       css: viewport,
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
@@ -423,17 +548,19 @@ try {
       darkOverlap,
       narrowOverlap,
       scrollMetrics,
+      sortKeyboard,
       tooltipCheck,
       primaryContrast,
       wcagCalibration,
+      cleanBaseline,
     },
     issues,
     adminIntegration:
-      'Fixed column widths; email column showOverflowTooltip; TableEllipsisCell slots for other text columns; no portico-ui CSS patches.',
+      'Fixed column widths; text columns use showOverflowTooltip (library overflow cell); no portico-ui CSS patches.',
     viteNote:
       'After swapping node_modules/portico-ui, clear node_modules/.vite and restart dev with --force so PtTable tooltip path is exercised.',
     libraryCandidateSincePrevious:
-      'f84d4bd: tooltip Teleport/fixed placement, header overflow isolation, primary pressed foreground hardening (vs b1901ae).',
+      '0.1.1 P2: keyboard overflow tooltip (focus only when overflow), sort Enter/Space+aria-sort, tooltip id/aria-describedby.',
     screenshotManifest: [
       `candidate-users-light-${TAG}.png`,
       `candidate-users-dark-${TAG}.png`,
@@ -454,5 +581,6 @@ try {
     process.exitCode = 1
   }
 } finally {
+  responseCollector.detach()
   await browser.close()
 }

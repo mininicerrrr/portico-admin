@@ -159,16 +159,15 @@ try {
     candidate: {
       repo: 'mininicerrrr/portico-ui',
       pr: 2,
-      ref: 'f84d4bd',
+      preparedVersion: '0.1.1',
+      preparedVersionPublic: false,
       tarballSha256:
-        'cb01d7eccf4ecfe438c0b89bb6c5ac723a2071f309b503d6d7db0974488ad7fa',
-      tarballFile: 'portico-ui-0.1.0_a58a.tgz',
-      tarballSha256Verified: true,
-      implementationSourceCommitSha: 'f84d4bd76e76daa7ead98d4b7a5fe0b442fecc78',
-      porticoUiBranchHeadCommitSha: 'fb0916777b40becdca1f39e4d12b16559e57de01',
+        '9bba3c4842f569b8bd3b17fc7fd731cd35244fc5bef3a31e350f17658d87befd',
+      tarballFile: 'portico-ui-0.1.1_a95f.tgz',
+      implementationSourceCommitSha: 'b72f0341e537881640795d2d4e2e48d6dcd425c8',
     },
     designerVisualAudit:
-      'targeted review: visible blockers cleared for USER review (not user final approval / merge / release / npm)',
+      'P2 0.1.1 candidate; Lead re-review in progress — not user final approval / merge / release / npm',
     finalVerificationComplete: false,
     finalApproval: false,
     trackedDependency: 'portico-ui@0.1.0 (npm registry only)',

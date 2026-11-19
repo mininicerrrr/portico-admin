@@ -19,7 +19,6 @@ import {
 import { demoUsersSeed } from '../data/demoUsers'
 import type { DemoUser, UserRole, UserStatus } from '../types/user'
 import { filterUsers, paginateUsers } from '../utils/userFilters'
-import TableEllipsisCell from '../components/TableEllipsisCell.vue'
 
 const users = ref<DemoUser[]>(demoUsersSeed.map((u) => ({ ...u })))
 
@@ -43,7 +42,7 @@ const editForm = reactive({
 
 /** 固定列宽 + 横向滚动（PtTable `pt-table__wrap` overflow:auto），文本列用插槽省略 */
 const columns = computed<TableColumn[]>(() => [
-  { prop: 'name', label: '姓名', width: 132, sortable: 'custom', slot: 'name' },
+  { prop: 'name', label: '姓名', width: 132, sortable: 'custom', showOverflowTooltip: true } as TableColumn,
   {
     prop: 'email',
     label: '邮箱',
@@ -51,10 +50,16 @@ const columns = computed<TableColumn[]>(() => [
     sortable: 'custom',
     showOverflowTooltip: true,
   } as TableColumn,
-  { prop: 'department', label: '部门', width: 96, sortable: 'custom', slot: 'department' },
+  { prop: 'department', label: '部门', width: 96, sortable: 'custom', showOverflowTooltip: true } as TableColumn,
   { prop: 'role', label: '角色', width: 96, sortable: 'custom', slot: 'role' },
   { prop: 'status', label: '状态', width: 88, sortable: 'custom', slot: 'status' },
-  { prop: 'lastLogin', label: '最近登录（演示）', width: 184, sortable: 'custom', slot: 'lastLogin' },
+  {
+    prop: 'lastLogin',
+    label: '最近登录（演示）',
+    width: 184,
+    sortable: 'custom',
+    showOverflowTooltip: true,
+  } as TableColumn,
   { prop: 'actions', label: '操作', width: 96, slot: 'actions' },
 ])
 
@@ -181,15 +186,6 @@ function saveEdit() {
       row-key="id"
       @sort-change="onSortChange"
     >
-      <template #name="{ value }">
-        <TableEllipsisCell :value="value as string" />
-      </template>
-      <template #department="{ value }">
-        <TableEllipsisCell :value="value as string" />
-      </template>
-      <template #lastLogin="{ value }">
-        <TableEllipsisCell :value="value as string" />
-      </template>
       <template #role="{ row }">
         <PtTag :type="row.role === 'admin' ? 'primary' : row.role === 'editor' ? 'warning' : 'info'" effect="light">
           {{ roleLabel(row.role as UserRole) }}
