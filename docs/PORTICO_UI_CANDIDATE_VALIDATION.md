@@ -126,7 +126,7 @@ npm ci
 
 > 临时覆盖 `node_modules/portico-ui` 后请 **`rm -rf node_modules/.vite`** 并 **`vite --force`** 重启 dev，否则可能仍预构建旧 npm 包（表格 `showOverflowTooltip` 路径不生效）。
 
-**Admin 证据 SHA（含本轮脚本/文档）**：`398ada63b8e8f8e8c8f8e8c8f8e8c8f8e8c8f8e8`（请 `git rev-parse HEAD` 核对完整 40 位）
+**Admin 证据提交**：`398ada6dfc62e8e6af82168fbf227ea8e2b86f70`（回归运行于其父 `20b39bd…`；`capture-ui-regression-f84d4bd.json` 内 `adminGitSha` 为当时 HEAD）
 
 **闸门**：`typecheck` / `test` (7) / `build` — 通过（tarball 已装 `node_modules`，SHA256 与上表一致）
 
