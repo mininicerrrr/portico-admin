@@ -1,11 +1,6 @@
 /**
- * UI screenshots + layout checks for portico-admin (candidate portico-ui in node_modules).
+ * UI screenshots + layout checks (candidate portico-ui in node_modules).
  * Does NOT imply final visual sign-off.
- *
- * Usage:
- *   npm run dev -- --host 127.0.0.1 --port 5173
- *   npm install --no-save playwright@1.49.0
- *   SCREENSHOT_DIR=/opt/cursor/artifacts node scripts/capture-ui-regression.mjs
  */
 import { chromium } from 'playwright'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -13,10 +8,12 @@ import path from 'node:path'
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? 'http://127.0.0.1:5173'
 const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
-const COMMIT = 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd'
+const COMMIT = '4bcf938b0bca4d37ece836eaff1a714002db880f'
+const TAG = '4bcf938'
 
 const DESKTOP = { width: 1440, height: 1000 }
 const NARROW = { width: 390, height: 844 }
+const DEVICE_SCALE_FACTOR = 1
 
 const issues = []
 
@@ -37,12 +34,57 @@ async function setTheme(page, mode) {
   }, mode)
 }
 
-async function closeMobileNav(page) {
-  const open = await page.locator('.admin-sidebar.is-open').count()
-  if (open > 0) {
-    await page.keyboard.press('Escape').catch(() => {})
-    await page.locator('.admin-sidebar-backdrop').click({ timeout: 2000 }).catch(() => {})
+/** Narrow layout: close drawer via backdrop (menu button is covered while open). */
+async function ensureMobileNavClosed(page) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const state = await getMobileNavState(page)
+    if (state.closed) return state
+    if ((await page.locator('.admin-sidebar-backdrop').count()) > 0) {
+      const vp = page.viewportSize() ?? NARROW
+      await page.mouse.click(vp.width - 32, Math.floor(vp.height / 2))
+    } else {
+      await page.locator('button:has-text("菜单")').first().click({ force: true })
+    }
+    await page.waitForTimeout(400)
   }
+  const state = await getMobileNavState(page)
+  if (!state.closed) {
+    throw new Error(`mobile nav failed to close: ${JSON.stringify(state)}`)
+  }
+  return state
+}
+
+async function ensureMobileNavOpen(page) {
+  const state = await getMobileNavState(page)
+  if (state.open) return state
+  await page.locator('button:has-text("菜单")').first().click()
+  await page.waitForSelector('.admin-sidebar.is-open', { timeout: 5000 })
+  await page.waitForSelector('.admin-sidebar-backdrop', { timeout: 5000 })
+  return getMobileNavState(page)
+}
+
+async function getMobileNavState(page) {
+  return page.evaluate(() => {
+    const sidebar = document.querySelector('.admin-sidebar')
+    const backdrop = document.querySelector('.admin-sidebar-backdrop')
+    const main = document.querySelector('.admin-main')
+    const sb = sidebar?.getBoundingClientRect()
+    const mainRect = main?.getBoundingClientRect()
+    const backdropVisible = !!backdrop && backdrop.getBoundingClientRect().width > 0
+    const openClass = sidebar?.classList.contains('is-open') ?? false
+    const sidebarCoversMain =
+      !!sb && !!mainRect && sb.right > mainRect.left + 8 && sb.width > 48
+    const closed = !backdropVisible && !openClass && !sidebarCoversMain
+    return {
+      closed,
+      open: openClass && backdropVisible,
+      openClass,
+      backdropVisible,
+      sidebarCoversMain,
+      sidebarRight: sb?.right ?? null,
+      mainLeft: mainRect?.left ?? null,
+    }
+  })
 }
 
 async function assertNoEmailOverlap(page) {
@@ -51,17 +93,12 @@ async function assertNoEmailOverlap(page) {
     for (const row of rows) {
       const cells = row.querySelectorAll('td')
       if (cells.length < 3) continue
-      const email = cells[1].querySelector('.table-ellipsis-cell') ?? cells[1]
+      const email = cells[1].querySelector('.table-ellipsis-cell, .pt-table__cell') ?? cells[1]
       const dept = cells[2]
       const er = email.getBoundingClientRect()
       const dr = dept.getBoundingClientRect()
-      const overlap = er.right > dr.left + 2
-      const emailScroll = email.scrollWidth > email.clientWidth + 1
-      if (overlap) {
+      if (er.right > dr.left + 2) {
         return { ok: false, reason: 'email-right overlaps department-left', er: er.right, dr: dr.left }
-      }
-      if (email.scrollWidth > email.clientWidth + 48 && emailScroll === false) {
-        return { ok: false, reason: 'email overflows without ellipsis clip' }
       }
     }
     return { ok: true }
@@ -69,79 +106,99 @@ async function assertNoEmailOverlap(page) {
 }
 
 async function shot(page, name) {
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(250)
   await page.screenshot({ path: path.join(outDir, name), fullPage: false })
 }
 
 const browser = await chromium.launch()
-const context = await browser.newContext({ locale: 'zh-CN' })
+const context = await browser.newContext({
+  locale: 'zh-CN',
+  viewport: DESKTOP,
+  deviceScaleFactor: DEVICE_SCALE_FACTOR,
+})
 const page = await context.newPage()
 await mkdir(outDir, { recursive: true })
 
 try {
-  await page.setViewportSize(DESKTOP)
   await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' })
   await setTheme(page, 'light')
   await page.goto(`${baseUrl}/users`, { waitUntil: 'networkidle' })
-  await closeMobileNav(page)
+
   const lightOverlap = await assertNoEmailOverlap(page)
   if (!lightOverlap.ok) issue('error', 'table-layout', `desktop light: ${lightOverlap.reason}`)
-  await shot(page, 'candidate-users-light-ccd5058.png')
+  await shot(page, `candidate-users-light-${TAG}.png`)
 
   await setTheme(page, 'dark')
   await page.reload({ waitUntil: 'networkidle' })
-  await closeMobileNav(page)
   const darkOverlap = await assertNoEmailOverlap(page)
   if (!darkOverlap.ok) issue('error', 'table-layout', `desktop dark: ${darkOverlap.reason}`)
-  await shot(page, 'candidate-users-dark-ccd5058.png')
+  await shot(page, `candidate-users-dark-${TAG}.png`)
 
   await setTheme(page, 'light')
   await page.goto(`${baseUrl}/form-demo`, { waitUntil: 'networkidle' })
-  await closeMobileNav(page)
-  await shot(page, 'candidate-form-light-ccd5058.png')
+  await shot(page, `candidate-form-light-${TAG}.png`)
 
   await setTheme(page, 'dark')
   await page.reload({ waitUntil: 'networkidle' })
-  await closeMobileNav(page)
-  await shot(page, 'candidate-form-dark-ccd5058.png')
+  await shot(page, `candidate-form-dark-${TAG}.png`)
 
   await page.setViewportSize(NARROW)
   await setTheme(page, 'dark')
   await page.goto(`${baseUrl}/users`, { waitUntil: 'networkidle' })
-  await page.locator('button:has-text("菜单")').first().click()
-  await page.waitForSelector('.admin-sidebar.is-open', { timeout: 3000 })
-  await shot(page, 'candidate-narrow-dark-nav-ccd5058.png')
 
-  await closeMobileNav(page)
-  await page.waitForSelector('.admin-sidebar:not(.is-open)', { timeout: 3000 }).catch(() => {})
+  const navOpenState = await ensureMobileNavOpen(page)
+  await shot(page, `candidate-narrow-dark-nav-${TAG}.png`)
+
+  const navClosedState = await ensureMobileNavClosed(page)
+
   const scrollMetrics = await page.evaluate(() => {
     const wrap = document.querySelector('.pt-table__wrap')
     if (!wrap) return null
-    return { scrollW: wrap.scrollWidth, clientW: wrap.clientWidth, canScroll: wrap.scrollWidth > wrap.clientWidth }
+    return {
+      scrollW: wrap.scrollWidth,
+      clientW: wrap.clientWidth,
+      canScroll: wrap.scrollWidth > wrap.clientWidth,
+    }
   })
   if (!scrollMetrics?.canScroll) {
-    issue('warn', 'table-scroll', 'narrow users: table wrap does not scroll horizontally (may be ok if columns fit)')
+    issue('warn', 'table-scroll', 'narrow closed nav: horizontal scroll not available on table wrap')
   }
+
   const narrowOverlap = await assertNoEmailOverlap(page)
   if (!narrowOverlap.ok) issue('error', 'table-layout', `narrow closed nav: ${narrowOverlap.reason}`)
-  await shot(page, 'candidate-users-narrow-closed-ccd5058.png')
+  await shot(page, `candidate-users-narrow-closed-${TAG}.png`)
 
+  const viewport = page.viewportSize()
   const evidence = {
     candidateCommit: COMMIT,
+    supersedes: 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd',
     finalVerificationComplete: false,
-    designerVisualAudit: 'pending',
     visualSignOff: false,
-    note: 'ccd5058 not visually accepted; expect refreshed portico-ui tarball before final rerun.',
-    viewports: { desktop: DESKTOP, narrow: NARROW },
+    designerVisualAudit: 'pending re-audit',
+    viewport: {
+      css: viewport,
+      deviceScaleFactor: DEVICE_SCALE_FACTOR,
+      desktopCapture: DESKTOP,
+      narrowCapture: NARROW,
+    },
+    mobileNav: {
+      beforeOpenShot: navOpenState,
+      afterCloseShot: navClosedState,
+    },
     checks: { lightOverlap, darkOverlap, narrowOverlap, scrollMetrics },
     issues,
-    libraryNote:
-      'Designer confirmed overflow in standalone portico-ui demo; component team investigating. Admin uses column width + TableEllipsisCell slots + pt-table__wrap scroll only.',
+    adminIntegration:
+      'Fixed column widths; slot-local TableEllipsisCell for text; no portico-ui CSS patches.',
+    library4bcf938:
+      'Default cells + colgroup + PtTableEllipsisCell export; disabled neutral + loading label fixes. Re-audit pending.',
   }
 
-  await writeFile(path.join(outDir, 'candidate-ui-regression-ccd5058.json'), JSON.stringify(evidence, null, 2))
+  const jsonPath = path.join(outDir, `candidate-ui-regression-${TAG}.json`)
+  await writeFile(jsonPath, JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence, null, 2))
-  if (issues.some((i) => i.severity === 'error')) process.exitCode = 1
+  if (issues.some((i) => i.severity === 'error') || !navClosedState.closed) {
+    process.exitCode = 1
+  }
 } finally {
   await browser.close()
 }

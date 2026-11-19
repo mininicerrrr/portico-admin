@@ -159,10 +159,10 @@ try {
     candidate: {
       repo: 'mininicerrrr/portico-ui',
       pr: 2,
-      commit: 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd',
-      supersedes: 'cd9a003f5a6cad0c58ede57b2830d660258e628a',
+      commit: '4bcf938b0bca4d37ece836eaff1a714002db880f',
+      supersedes: 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd',
     },
-    designerVisualAudit: 'ccd5058 not accepted — component/demo investigating overflow',
+    designerVisualAudit: 'pending re-audit on 4bcf938 — not final',
     finalVerificationComplete: false,
     finalApproval: false,
     trackedDependency: 'portico-ui@0.1.0 (npm registry only)',

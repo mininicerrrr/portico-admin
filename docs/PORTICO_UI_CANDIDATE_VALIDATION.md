@@ -9,8 +9,8 @@
 | 项 | 值 |
 | --- | --- |
 | portico-ui PR | https://github.com/mininicerrrr/portico-ui/pull/2 |
-| **Commit（当前验证）** | `ccd5058cf8277579dd38bc17bdb0915e6b6481fd` |
-| 取代 | `cd9a003…`（已作废，勿再使用） |
+| **Commit（当前验证）** | `4bcf938b0bca4d37ece836eaff1a714002db880f` |
+| 取代 | `ccd5058…`、`cd9a003…`（已作废） |
 | 包内版本字段 | `0.1.0`（与 npm 同号，**内容不同**） |
 
 从 PR CI / 附件 tarball（例如 `portico-ui-0.1.0.tgz`）解压，**勿提交进本仓库**。
@@ -98,13 +98,13 @@ npm ci
 | 来源 | `--pt-color-primary` | `--pt-radius-s` | `--pt-lintel` |
 | --- | --- | --- | --- |
 | npm `0.1.0` | `#3b7ddd` | `2px` | `3px` |
-| PR#2 `ccd5058` | `#3473ce` | `6px` | `0px` |
+| PR#2 `4bcf938` | `#3473ce` | `6px` | `0px` |
 
 **跟踪依赖仍为 npm**，直至新版本获批发布。
 
 ### 4. 设计签收状态
 
-**设计师视觉审计：`ccd5058` 未通过视觉签收**（表格溢出问题在组件独立演示中亦可复现；组件侧正在修库 / disabled·loading 等）。**预计将有新 tarball 再做终审。**
+**设计师视觉审计：待对 `4bcf938` 复审**（`ccd5058` 未通过；`4bcf938` 含表格溢出/colgroup/`PtTableEllipsisCell` 等修复，**仍非终审**）（表格溢出问题在组件独立演示中亦可复现；组件侧正在修库 / disabled·loading 等）。**预计将有新 tarball 再做终审。**
 
 **`final verification complete` = 否** — 令牌/构建通过不等于视觉验收。
 
@@ -112,10 +112,14 @@ npm ci
 
 |  topic | 说明 |
 | --- | --- |
-| `PtTable` 文本省略 API | 当前 `TableColumn` 仅有 `width`/`minWidth`/`formatter`/`slot`，**无** `showOverflowTooltip` / `ellipsis`；`table-layout:fixed` 下 `td` 默认不裁切文本。Admin 用 **插槽 + `TableEllipsisCell`** 与 **固定列宽** + **`pt-table__wrap` 横向滚动** 集成。 |
+| `PtTable` 溢出（`4bcf938`） | 库侧：默认单元格溢出 + `colgroup`、`showOverflowTooltip` 列选项、导出 **`PtTableEllipsisCell`**。Admin：**固定列宽** + 文本列 **admin `TableEllipsisCell` 插槽**（自定义槽内容自备裁切）；标签/按钮槽仍由 admin 负责。跟踪 npm 类型未更新前不强制改用库导出。 |
 | disabled / loading 样式 | 组件工作流处理中；admin 不重复修改。 |
 
-## 最近一次自动化结果（ccd5058，非终审）
+## 窄屏截图要求（避免假阳性）
+
+`capture-ui-regression.mjs` 在 **narrow closed** 截图前必须断言：`admin-sidebar-backdrop` 不存在、`.admin-sidebar.is-open` 为假、侧栏不覆盖 `admin-main`（通过 **菜单** 按钮关闭，必要时重试）。证据 JSON 记录 `viewport` + `deviceScaleFactor` 与 `mobileNav` 状态。
+
+## 最近一次自动化结果（4bcf938，非终审）
 
 - `typecheck` / `test` (7) / `build`：**通过**（候选覆盖 `node_modules` 后）
 - `scripts/candidate-regression.mjs`：**通过**（路由、用户筛选/排序/分页/抽屉、表单校验、主题、窄屏导航）
