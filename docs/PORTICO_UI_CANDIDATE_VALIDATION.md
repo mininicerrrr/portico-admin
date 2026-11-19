@@ -134,6 +134,7 @@ npm ci
 
 **`capture-ui-regression.mjs`**：截图见 `/opt/cursor/artifacts/*-f84d4bd.png` 与 `candidate-ui-regression-f84d4bd.json`；邮箱列 `showOverflowTooltip`：**hover 时 Teleport + `position:fixed` 且在视口内**；窄屏 nav open/closed 断言通过（open `37782` B vs closed `76916` B，非同图）
 
-**自动化仍记录的诚实问题（非设计签收结论）**：
-- **Primary 按下态**：`mousedown` 采样下文案/背景近似对比 **~2.24**（脚本阈值 2.5，`readable: false`）— 与设计师「可见阻断已清」并行，供 USER 看截图与 JSON
-- **Tooltip 离开/聚焦**：`closesOnLeave: false`（DOM 仍留 panel 节点）；`afterFocus.inViewport: false` — 需人工对照截图，未见表格裁切回归
+**定向探测（修正 WCAG / v-show 可见性断言后，`issues: []`）**：
+- **Tooltip 关闭**：原 `closesOnLeave:false` 为断言错误（panel 节点常留 DOM）；按 `hideAfter=80ms` 等待后用几何/样式判可见 → `closesOnLeave:true`
+- **Tooltip 键盘**：`.pt-table__cell` 非 Tab 可聚焦；`focus()` 不触发 overflow tooltip（记录为集成/spec 差距，**非** hover 裁切回归）
+- **Primary**：WCAG 自校 21:1；idle 白 on `#3473ce` ≈**4.68:1**；`mouse.down` 命中 `:active` 背景 ≈`rgb(44,99,179)`，对比 ≈**5.93:1**（分开记录 idle/active，不以 2.5 线性近似误判）

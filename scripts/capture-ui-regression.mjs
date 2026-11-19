@@ -21,10 +21,48 @@ const DESKTOP = { width: 1440, height: 1000 }
 const NARROW = { width: 390, height: 844 }
 const DEVICE_SCALE_FACTOR = 1
 
+const TOOLTIP_SHOW_AFTER_MS = 80
+const TOOLTIP_HIDE_AFTER_MS = 80
+const TOOLTIP_LEAVE_WAIT_MS = TOOLTIP_HIDE_AFTER_MS + 160
+
 const issues = []
 
 function issue(severity, area, detail) {
   issues.push({ severity, area, detail })
+}
+
+function srgbChannelToLinear(channel) {
+  const v = channel / 255
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+}
+
+function relativeLuminance([r, g, b]) {
+  return (
+    0.2126 * srgbChannelToLinear(r) +
+    0.7152 * srgbChannelToLinear(g) +
+    0.0722 * srgbChannelToLinear(b)
+  )
+}
+
+/** WCAG 2.x contrast ratio from sRGB `[r,g,b]` tuples. */
+function wcagContrast(fgRgb, bgRgb) {
+  const l1 = relativeLuminance(fgRgb)
+  const l2 = relativeLuminance(bgRgb)
+  const lighter = Math.max(l1, l2)
+  const darker = Math.min(l1, l2)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function parseRgbCss(color) {
+  const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+}
+
+const wcagCalibration = {
+  blackOnWhite: wcagContrast([0, 0, 0], [255, 255, 255]),
+  whiteOnBlack: wcagContrast([255, 255, 255], [0, 0, 0]),
+  whiteOnPrimaryIdle: wcagContrast([255, 255, 255], [0x34, 0x73, 0xce]),
+  whiteOnPrimaryActive: wcagContrast([255, 255, 255], [0x27, 0x5a, 0xa3]),
 }
 
 async function setTheme(page, mode) {
@@ -116,66 +154,130 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(outDir, name), fullPage: false })
 }
 
-async function checkPrimaryPressedReadable(page) {
-  const btn = page.locator('.pt-table .pt-button--primary').first()
-  await btn.waitFor({ state: 'visible' })
-  return btn.evaluate((el) => {
-    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+function sampleButtonContrastFromPage() {
+  return (el) => {
     const cs = getComputedStyle(el)
     const color = cs.color
     const bg = cs.backgroundColor
-    const fg = color.match(/\d+/g)?.map(Number) ?? []
-    const bgc = bg.match(/\d+/g)?.map(Number) ?? []
-    const l1 = (0.299 * (fg[0] ?? 0) + 0.587 * (fg[1] ?? 0) + 0.114 * (fg[2] ?? 0)) / 255
-    const l2 = (0.299 * (bgc[0] ?? 0) + 0.587 * (bgc[1] ?? 0) + 0.114 * (bgc[2] ?? 0)) / 255
-    const contrast = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
-    return { color, background: bg, contrastApprox: contrast, readable: contrast >= 2.5 }
-  })
+    const matchesActive = el.matches(':active')
+    return { color, background: bg, matchesActive }
+  }
 }
 
-async function checkTableOverflowTooltip(page) {
-  const emailCell = page.locator('.pt-table tbody tr:first-child td:nth-child(2) .pt-table__cell').first()
-  await emailCell.waitFor({ state: 'visible', timeout: 15_000 })
-  await emailCell.hover()
-  await page.waitForTimeout(450)
-  const hover = await page.evaluate(() => {
-    const panel =
-      document.querySelector('.pt-tooltip__panel') ??
-      document.querySelector('[class*="pt-tooltip"] .pt-tooltip__panel')
-    if (!panel) return { found: false }
+async function checkPrimaryButtonContrast(page) {
+  const btn = page.locator('.pt-table .pt-button--primary').first()
+  await btn.waitFor({ state: 'visible' })
+  await btn.scrollIntoViewIfNeeded()
+
+  const idleSample = await btn.evaluate(sampleButtonContrastFromPage())
+  const idleFg = parseRgbCss(idleSample.color)
+  const idleBg = parseRgbCss(idleSample.background)
+  const idleContrast =
+    idleFg && idleBg ? wcagContrast(idleFg, idleBg) : null
+
+  const box = await btn.boundingBox()
+  if (!box) throw new Error('primary button missing bounding box')
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.waitForTimeout(80)
+  const activeSample = await btn.evaluate(sampleButtonContrastFromPage())
+  await page.mouse.up()
+  const activeFg = parseRgbCss(activeSample.color)
+  const activeBg = parseRgbCss(activeSample.background)
+  const activeContrast =
+    activeFg && activeBg ? wcagContrast(activeFg, activeBg) : null
+
+  const wcagAANormalText = 4.5
+  return {
+    method: 'playwright mouse.down on button center; WCAG 2.x relative luminance',
+    wcagCalibration,
+    wcagAANormalText,
+    idle: {
+      ...idleSample,
+      contrast: idleContrast,
+      wcagAAPass: idleContrast != null && idleContrast >= wcagAANormalText,
+    },
+    active: {
+      ...activeSample,
+      contrast: activeContrast,
+      wcagAAPass: activeContrast != null && activeContrast >= wcagAANormalText,
+      activePseudoApplied: activeSample.matchesActive,
+    },
+  }
+}
+
+async function readVisibleTooltipPanel(page) {
+  return page.evaluate(() => {
+    const isPanelVisible = (panel) => {
+      if (!panel) return false
+      const cs = getComputedStyle(panel)
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) {
+        return false
+      }
+      const r = panel.getBoundingClientRect()
+      return r.width > 0.5 && r.height > 0.5
+    }
+    const panels = [...document.querySelectorAll('.pt-tooltip__panel')]
+    const panel = panels.find(isPanelVisible) ?? null
+    if (!panel) return { panelVisible: false }
     const r = panel.getBoundingClientRect()
     const cs = getComputedStyle(panel)
     const vpW = window.innerWidth
     const vpH = window.innerHeight
     return {
-      found: true,
+      panelVisible: true,
       position: cs.position,
       fixed: cs.position === 'fixed',
       inViewport: r.bottom > 0 && r.top < vpH && r.right > 0 && r.left < vpW,
       rect: { top: r.top, left: r.left, width: r.width, height: r.height },
     }
   })
+}
+
+async function checkTableOverflowTooltip(page) {
+  const emailTrigger = page.locator('.pt-table tbody tr:first-child td:nth-child(2) .pt-table__cell').first()
+  await emailTrigger.waitFor({ state: 'visible', timeout: 15_000 })
+
+  await emailTrigger.hover()
+  await page.waitForTimeout(TOOLTIP_SHOW_AFTER_MS + 120)
+  const hover = await readVisibleTooltipPanel(page)
+
   const wrap = page.locator('.pt-table__wrap')
   await wrap.evaluate((el) => {
     el.scrollLeft = 120
   })
-  await page.waitForTimeout(300)
-  const afterScroll = await page.evaluate(() => {
-    const panel = document.querySelector('.pt-tooltip__panel')
-    return { stillVisible: !!panel && panel.getBoundingClientRect().height > 0 }
+  await page.waitForTimeout(200)
+  const afterScrollWhileHovered = await readVisibleTooltipPanel(page)
+
+  await page.mouse.move(8, 8)
+  await page.waitForTimeout(TOOLTIP_LEAVE_WAIT_MS)
+  const afterPointerLeave = await readVisibleTooltipPanel(page)
+  const closesOnLeave = !afterPointerLeave.panelVisible
+
+  const focusReport = await emailTrigger.evaluate((el) => {
+    el.focus()
+    return {
+      focusable: el.tabIndex >= 0 || el.getAttribute('tabindex') != null,
+      activeTag: document.activeElement?.tagName ?? null,
+      activeClass: document.activeElement?.className ?? null,
+      activeIsCell: document.activeElement?.classList?.contains('pt-table__cell') ?? false,
+    }
   })
-  await page.mouse.move(0, 0)
-  await page.waitForTimeout(350)
-  const afterLeave = await page.evaluate(() => !document.querySelector('.pt-tooltip__panel'))
-  await emailCell.focus()
-  await page.waitForTimeout(350)
-  const afterFocus = await page.evaluate(() => {
-    const panel = document.querySelector('.pt-tooltip__panel')
-    if (!panel) return { found: false }
-    const r = panel.getBoundingClientRect()
-    return { found: true, inViewport: r.height > 0 && r.width > 0 }
-  })
-  return { hover, afterScroll, afterLeave, closesOnLeave: afterLeave, afterFocus }
+  await page.waitForTimeout(TOOLTIP_SHOW_AFTER_MS + 200)
+  const afterFocus = await readVisibleTooltipPanel(page)
+
+  return {
+    documentedDelaysMs: { showAfter: TOOLTIP_SHOW_AFTER_MS, hideAfter: TOOLTIP_HIDE_AFTER_MS },
+    leaveWaitMs: TOOLTIP_LEAVE_WAIT_MS,
+    hover,
+    afterScrollWhileHovered,
+    afterPointerLeave: { ...afterPointerLeave, closesOnLeave },
+    keyboardFocus: { ...focusReport, popup: afterFocus },
+    assertionNote:
+      'Panel nodes stay in DOM with v-show; visibility uses getBoundingClientRect + computed style, not querySelector presence.',
+  }
 }
 
 const browser = await chromium.launch()
@@ -191,23 +293,61 @@ try {
   await page.goto(`${baseUrl}/`, { waitUntil: 'networkidle' })
   await setTheme(page, 'light')
   await page.goto(`${baseUrl}/users`, { waitUntil: 'networkidle' })
+  if ((await page.locator('.pt-drawer.is-visible').count()) > 0) {
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(350)
+  }
 
   const lightOverlap = await assertNoEmailOverlap(page)
   if (!lightOverlap.ok) issue('error', 'table-layout', `desktop light: ${lightOverlap.reason}`)
+
   const tooltipCheck = await checkTableOverflowTooltip(page)
-  if (!tooltipCheck.hover?.found) {
+  if (!tooltipCheck.hover?.panelVisible) {
     issue(
       'warn',
       'tooltip',
-      '库 showOverflowTooltip 未出现 pt-tooltip（若 node_modules 仍为 npm 0.1.0 可忽略；候选包应出现）',
+      '库 showOverflowTooltip hover 未出现可见 panel（若 node_modules 仍为 npm 0.1.0 可忽略；候选包应出现）',
     )
   } else if (!tooltipCheck.hover.fixed || !tooltipCheck.hover.inViewport) {
-    issue('error', 'tooltip', `Teleported/fixed placement: ${JSON.stringify(tooltipCheck.hover)}`)
+    issue('error', 'tooltip', `hover Teleport/fixed placement: ${JSON.stringify(tooltipCheck.hover)}`)
   }
-  const primaryPressed = await checkPrimaryPressedReadable(page)
-  if (!primaryPressed.readable) {
-    issue('error', 'primary-pressed', `按下态对比不足: ${JSON.stringify(primaryPressed)}`)
+  if (tooltipCheck.afterPointerLeave?.panelVisible) {
+    issue(
+      'error',
+      'tooltip',
+      `pointer leave 后 panel 仍可见（已等待 hideAfter+${TOOLTIP_LEAVE_WAIT_MS}ms）: ${JSON.stringify(tooltipCheck.afterPointerLeave)}`,
+    )
   }
+  if (
+    tooltipCheck.keyboardFocus.popup?.panelVisible &&
+    !tooltipCheck.keyboardFocus.popup.inViewport
+  ) {
+    issue(
+      'error',
+      'tooltip',
+      `focus 弹出层可见但不在视口: ${JSON.stringify(tooltipCheck.keyboardFocus)}`,
+    )
+  }
+
+  const primaryContrast = await checkPrimaryButtonContrast(page)
+  if (primaryContrast.active.activePseudoApplied === false) {
+    issue(
+      'warn',
+      'primary-pressed',
+      `未命中 :active（采样可能仍为 idle）；idle=${primaryContrast.idle.background} active=${primaryContrast.active.background}`,
+    )
+  } else if (!primaryContrast.active.wcagAAPass) {
+    issue(
+      'error',
+      'primary-pressed',
+      `按下态 WCAG 正文对比不足 4.5:1: ${JSON.stringify(primaryContrast.active)}`,
+    )
+  }
+  if ((await page.locator('.pt-drawer.is-visible').count()) > 0) {
+    await page.locator('.pt-drawer button:has-text("取消")').first().click()
+    await page.waitForTimeout(300)
+  }
+
   await shot(page, `candidate-users-light-${TAG}.png`)
 
   await setTheme(page, 'dark')
@@ -278,7 +418,15 @@ try {
       beforeOpenShot: navOpenState,
       afterCloseShot: navClosedState,
     },
-    checks: { lightOverlap, darkOverlap, narrowOverlap, scrollMetrics, tooltipCheck, primaryPressed },
+    checks: {
+      lightOverlap,
+      darkOverlap,
+      narrowOverlap,
+      scrollMetrics,
+      tooltipCheck,
+      primaryContrast,
+      wcagCalibration,
+    },
     issues,
     adminIntegration:
       'Fixed column widths; email column showOverflowTooltip; TableEllipsisCell slots for other text columns; no portico-ui CSS patches.',
