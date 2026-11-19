@@ -155,27 +155,45 @@ try {
   const focused = await page.evaluate(() => document.activeElement?.tagName)
   if (!focused) record('warn', 'a11y', 'Tab 后未检测到 focus 元素')
 
+  const registryEvidence = process.env.REGISTRY_EVIDENCE === '1'
   const evidence = {
-    candidate: {
-      repo: 'mininicerrrr/portico-ui',
-      pr: 2,
-      preparedVersion: '0.1.1',
-      preparedVersionPublic: false,
-      tarballSha256:
-        process.env.CANDIDATE_TARBALL_SHA256 ??
-        '3fd6e3a37724431bc2cf609fbbdd13380e81275c629b162f4c182600837648cd',
-      tarballFile: process.env.CANDIDATE_TARBALL_FILE ?? 'portico-ui-0.1.1_e702.tgz',
-      implementationSourceCommitSha:
-        process.env.PORTICO_UI_IMPLEMENTATION_SHA ??
-        '61bedc17142d1afe11a5b7345b34bb5b5c05e2b1',
-      porticoUiEvidenceScriptHead:
-        process.env.PORTICO_UI_EVIDENCE_SCRIPT_HEAD ?? 'a614c7b63ca6f778d7fc77d6e940b459b1cf5dd1',
-    },
-    designerVisualAudit:
-      'P2 0.1.1 candidate; Lead re-review in progress — not user final approval / merge / release / npm',
+  ...(registryEvidence
+      ? {
+          registry: {
+            package: 'portico-ui',
+            version: '0.1.2',
+            installSource: 'npm registry lockfile',
+            lockIntegrity:
+              'sha512-xRXiAko1wO6+OdYklDaT9TMnd+04zXLNCgoGhYvN0Xa+eo8Fm2DHj7Y9CmCEyd7Hf8PsmceJc3hjhMZOarnCDg==',
+            approvedTarballSha256:
+              '6f236774f1ed67b6aaf476891f51c3aa0fe9cda627b3af2d1aba16bbec9e52e5',
+            runtimeImplementationSha: 'b4c202d74862311f7bfc276d0fa25ba6f23ceaec',
+            porticoUiEvidenceScriptHead: 'b346428de578a50b6556a5a14716b3d49188b72f',
+          },
+        }
+      : {
+          candidate: {
+            repo: 'mininicerrrr/portico-ui',
+            pr: 2,
+            preparedVersion: '0.1.1',
+            preparedVersionPublic: false,
+            tarballSha256:
+              process.env.CANDIDATE_TARBALL_SHA256 ??
+              '3fd6e3a37724431bc2cf609fbbdd13380e81275c629b162f4c182600837648cd',
+            tarballFile: process.env.CANDIDATE_TARBALL_FILE ?? 'portico-ui-0.1.1_e702.tgz',
+            implementationSourceCommitSha:
+              process.env.PORTICO_UI_IMPLEMENTATION_SHA ??
+              '61bedc17142d1afe11a5b7345b34bb5b5c05e2b1',
+            porticoUiEvidenceScriptHead:
+              process.env.PORTICO_UI_EVIDENCE_SCRIPT_HEAD ?? 'a614c7b63ca6f778d7fc77d6e940b459b1cf5dd1',
+          },
+        }),
+    designerVisualAudit: registryEvidence
+      ? 'Registry 0.1.2 admin integration; not merge / deploy / Pages.'
+      : 'P2 0.1.1 candidate; Lead re-review in progress — not user final approval / merge / release / npm',
     finalVerificationComplete: false,
     finalApproval: false,
-    trackedDependency: 'portico-ui@0.1.0 (npm registry only)',
+    trackedDependency: registryEvidence ? 'portico-ui@0.1.2' : 'portico-ui@0.1.0 (npm registry only)',
     adminHostCollision: {
       vitepressPresent: false,
       note: 'Prior white/narrow table snapshot was VitePress docs host CSS, not admin.',
@@ -197,7 +215,10 @@ try {
     },
   }
 
-  await writeFile(path.join(outDir, 'candidate-token-evidence.json'), JSON.stringify(evidence, null, 2))
+  const tokenOut = registryEvidence
+    ? 'registry-token-evidence-0.1.2.json'
+    : 'candidate-token-evidence.json'
+  await writeFile(path.join(outDir, tokenOut), JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence, null, 2))
 
   if (issues.some((i) => i.severity === 'error')) {

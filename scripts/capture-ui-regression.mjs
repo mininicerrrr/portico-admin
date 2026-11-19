@@ -9,20 +9,34 @@ import { createPorticoUiResponseCollector, hashInstalledPorticoUi } from './runt
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? 'http://127.0.0.1:5173'
 const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
-const TAG = process.env.CANDIDATE_TAG ?? '61bedc'
+const REGISTRY_EVIDENCE = process.env.REGISTRY_EVIDENCE === '1'
+const TAG =
+  process.env.CANDIDATE_TAG ?? (REGISTRY_EVIDENCE ? 'registry-0.1.2' : '61bedc')
+const SHOT_PREFIX = REGISTRY_EVIDENCE ? 'registry' : 'candidate'
 const TARBALL_SHA256 =
   process.env.CANDIDATE_TARBALL_SHA256 ??
-  '3fd6e3a37724431bc2cf609fbbdd13380e81275c629b162f4c182600837648cd'
-const TARBALL_NAME = process.env.CANDIDATE_TARBALL_FILE ?? 'portico-ui-0.1.1_e702.tgz'
+  (REGISTRY_EVIDENCE
+    ? '6f236774f1ed67b6aaf476891f51c3aa0fe9cda627b3af2d1aba16bbec9e52e5'
+    : '3fd6e3a37724431bc2cf609fbbdd13380e81275c629b162f4c182600837648cd')
+const TARBALL_NAME =
+  process.env.CANDIDATE_TARBALL_FILE ??
+  (REGISTRY_EVIDENCE ? 'portico-ui-0.1.2.tgz (npm registry)' : 'portico-ui-0.1.1_e702.tgz')
 const PORTICO_UI_IMPLEMENTATION_SHA =
   process.env.PORTICO_UI_IMPLEMENTATION_SHA ??
-  '61bedc17142d1afe11a5b7345b34bb5b5c05e2b1'
+  (REGISTRY_EVIDENCE
+    ? 'b4c202d74862311f7bfc276d0fa25ba6f23ceaec'
+    : '61bedc17142d1afe11a5b7345b34bb5b5c05e2b1')
 const PORTICO_UI_EVIDENCE_SCRIPT_HEAD =
-  process.env.PORTICO_UI_EVIDENCE_SCRIPT_HEAD ?? 'a614c7b63ca6f778d7fc77d6e940b459b1cf5dd1'
-const DELTA_CAPTURE = process.env.CAPTURE_DELTA === '1'
-const INHERITED_VISUAL_TAG = 'b72f034'
-const PORTICO_UI_PREPARED_VERSION = '0.1.1'
-const TRACKED_NPM_DEPENDENCY = 'portico-ui@0.1.0'
+  process.env.PORTICO_UI_EVIDENCE_SCRIPT_HEAD ??
+  (REGISTRY_EVIDENCE
+    ? 'b346428de578a50b6556a5a14716b3d49188b72f'
+    : 'a614c7b63ca6f778d7fc77d6e940b459b1cf5dd1')
+const DELTA_CAPTURE = process.env.CAPTURE_DELTA === '1' || REGISTRY_EVIDENCE
+const INHERITED_VISUAL_TAG = REGISTRY_EVIDENCE ? null : 'b72f034'
+const PORTICO_UI_PREPARED_VERSION = REGISTRY_EVIDENCE ? '0.1.2' : '0.1.1'
+const TRACKED_NPM_DEPENDENCY = REGISTRY_EVIDENCE ? 'portico-ui@0.1.2' : 'portico-ui@0.1.0'
+const REGISTRY_INTEGRITY =
+  'sha512-xRXiAko1wO6+OdYklDaT9TMnd+04zXLNCgoGhYvN0Xa+eo8Fm2DHj7Y9CmCEyd7Hf8PsmceJc3hjhMZOarnCDg=='
 const ADMIN_BRANCH = 'cursor/portico-admin-v1-1deb'
 const SKELETON_INTEGRATION = 'not_applicable'
 
@@ -373,7 +387,7 @@ async function checkTableOverflowTooltip(page) {
     })
     const popupOnFocus = await readVisibleTooltipPanel(page)
     if (DELTA_CAPTURE && popupOnFocus.panelVisible) {
-      await shot(page, `candidate-delta-focus-tooltip-${TAG}.png`)
+      await shot(page, `${SHOT_PREFIX}-delta-focus-tooltip-${TAG}.png`)
     }
     await page.keyboard.press('Escape')
     await page.waitForTimeout(120)
@@ -553,17 +567,29 @@ try {
 
   const viewport = page.viewportSize()
   const evidence = {
-    packageIdentity: {
-      preparedVersion: PORTICO_UI_PREPARED_VERSION,
-      preparedVersionPublic: false,
-      tarballSha256: TARBALL_SHA256,
-      tarballFile: TARBALL_NAME,
-      implementationSourceCommitSha: PORTICO_UI_IMPLEMENTATION_SHA,
-      porticoUiEvidenceScriptHead: PORTICO_UI_EVIDENCE_SCRIPT_HEAD,
-      trackedNpmDependency: TRACKED_NPM_DEPENDENCY,
-    },
+    packageIdentity: REGISTRY_EVIDENCE
+      ? {
+          registryVersion: '0.1.2',
+          registryLatest: true,
+          installSource: 'npm registry (lock integrity)',
+          lockIntegrity: REGISTRY_INTEGRITY,
+          approvedTarballSha256: TARBALL_SHA256,
+          approvedTarballNote: 'Matches npm packument shasum; compare-only attachment not used to install',
+          runtimeImplementationSha: PORTICO_UI_IMPLEMENTATION_SHA,
+          porticoUiEvidenceScriptHead: PORTICO_UI_EVIDENCE_SCRIPT_HEAD,
+          trackedNpmDependency: TRACKED_NPM_DEPENDENCY,
+        }
+      : {
+          preparedVersion: PORTICO_UI_PREPARED_VERSION,
+          preparedVersionPublic: false,
+          tarballSha256: TARBALL_SHA256,
+          tarballFile: TARBALL_NAME,
+          implementationSourceCommitSha: PORTICO_UI_IMPLEMENTATION_SHA,
+          porticoUiEvidenceScriptHead: PORTICO_UI_EVIDENCE_SCRIPT_HEAD,
+          trackedNpmDependency: TRACKED_NPM_DEPENDENCY,
+        },
     captureMode: DELTA_CAPTURE ? 'delta' : 'full',
-    inheritedVisualEvidence: DELTA_CAPTURE
+    inheritedVisualEvidence: DELTA_CAPTURE && INHERITED_VISUAL_TAG
       ? {
           priorCandidateTag: INHERITED_VISUAL_TAG,
           priorTarballSha256: '9bba3c4842f569b8bd3b17fc7fd731cd35244fc5bef3a31e350f17658d87befd',
@@ -583,12 +609,13 @@ try {
     installedNodeModules: installedProof,
     browserLoadedPorticoUi: responseCollector.getCaptured(),
     skeletonIntegration: SKELETON_INTEGRATION,
-    npmPackagePublic: false,
+    npmPackagePublic: REGISTRY_EVIDENCE,
     finalVerificationComplete: false,
     visualSignOff: false,
     productApproval: false,
-    designerVisualAudit:
-      'P2 candidate; Lead independent re-review in progress — not user final approval / merge / release / npm',
+    designerVisualAudit: REGISTRY_EVIDENCE
+      ? 'Registry 0.1.2 integration evidence; not merge / deploy / Pages / npm publish from admin.'
+      : 'P2 candidate; Lead independent re-review in progress — not user final approval / merge / release / npm',
     viewport: {
       css: viewport,
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
@@ -618,15 +645,17 @@ try {
     issues,
     adminIntegration:
       'Fixed column widths; text columns use showOverflowTooltip (library overflow cell); no portico-ui CSS patches.',
-    viteNote:
-      'After swapping node_modules/portico-ui, clear node_modules/.vite and restart dev with --force so PtTable tooltip path is exercised.',
-    libraryCandidateSincePrevious:
-      '0.1.1 P2: keyboard overflow tooltip (focus only when overflow), sort Enter/Space+aria-sort, tooltip id/aria-describedby.',
+    viteNote: REGISTRY_EVIDENCE
+      ? 'After registry npm ci, clear node_modules/.vite and vite --force before Playwright.'
+      : 'After swapping node_modules/portico-ui, clear node_modules/.vite and restart dev with --force so PtTable tooltip path is exercised.',
+    libraryCandidateSincePrevious: REGISTRY_EVIDENCE
+      ? 'Official npm portico-ui@0.1.2 — keyboard sort, overflow tooltip a11y from registry install.'
+      : '0.1.1 P2: keyboard overflow tooltip (focus only when overflow), sort Enter/Space+aria-sort, tooltip id/aria-describedby.',
     screenshotManifest: DELTA_CAPTURE
       ? [
-          `candidate-delta-focus-tooltip-${TAG}.png`,
-          `candidate-ui-regression-${TAG}.json`,
-          `...(inherited ${INHERITED_VISUAL_TAG} *.png)`,
+          `${SHOT_PREFIX}-delta-focus-tooltip-${TAG}.png`,
+          `${REGISTRY_EVIDENCE ? 'registry' : 'candidate'}-ui-regression-${TAG}.json`,
+          ...(INHERITED_VISUAL_TAG ? [`...(inherited ${INHERITED_VISUAL_TAG} *.png)`] : []),
         ]
       : [
           `candidate-users-light-${TAG}.png`,
@@ -641,7 +670,8 @@ try {
     adminGitSha: process.env.ADMIN_GIT_SHA ?? null,
   }
 
-  const jsonPath = path.join(outDir, `candidate-ui-regression-${TAG}.json`)
+  const jsonBasename = `${REGISTRY_EVIDENCE ? 'registry' : 'candidate'}-ui-regression-${TAG}.json`
+  const jsonPath = path.join(outDir, jsonBasename)
   await writeFile(jsonPath, JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence, null, 2))
   if (issues.some((i) => i.severity === 'error') || !navClosedState.closed) {

@@ -14,11 +14,12 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke:pages": "node scripts/pages-preview-smoke.mjs"
+    "smoke:pages": "node scripts/pages-preview-smoke.mjs",
+    "verify:registry-install": "node scripts/registry-install-verification.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "5.2.8",
-    "portico-ui": "0.1.0",
+    "portico-ui": "0.1.2",
     "vue": "^3.5.44",
     "vue-router": "^4.6.5"
   },
