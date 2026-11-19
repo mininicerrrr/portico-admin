@@ -1,0 +1,64 @@
+# Deploy Portico Admin to GitHub Pages (project site: /portico-admin/).
+# Triggers: push to main, workflow_dispatch on main only — never pull_request / pull_request_target.
+# This PR adds workflow code only; merge does not by itself require immediate dispatch (no deploy in PR CI).
+
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Default read-only; deploy job escalates only pages + OIDC.
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: VITE_BASE_PATH=/portico-admin/ npm run build
+      - run: cp dist/index.html dist/404.html
+      - run: npx playwright install chromium
+      - run: npm run smoke:pages
+        env:
+          VITE_BASE_PATH: /portico-admin/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
