@@ -1,0 +1,71 @@
+# Deploy Portico Admin to GitHub Pages (project site: /portico-admin/).
+# Triggers: push to main (including merge commits), workflow_dispatch on main only.
+# Never pull_request / pull_request_target — PR validation uses ci.yml only.
+#
+# Merging this workflow to main produces a push event and WILL attempt deploy
+# (if Settings → Pages source is GitHub Actions). PR runs do not execute this file.
+
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: VITE_BASE_PATH=/portico-admin/ npm run build
+      - run: cp dist/index.html dist/404.html
+      - run: npx playwright install chromium
+      - run: npm run smoke:pages
+        env:
+          VITE_BASE_PATH: /portico-admin/
+      # Staging artifact only; npm/build steps never hold pages:write/OIDC (required by deploy-pages, not upload-pages-artifact).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portico-admin-pages-dist
+          path: dist
+          if-no-files-found: error
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: portico-admin-pages-dist
+          path: dist
+      # configure-pages: metadata only (no site enablement); requires OIDC/Pages token from deploy job.
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

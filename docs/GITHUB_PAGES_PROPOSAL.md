@@ -1,10 +1,10 @@
-# GitHub Pages 部署提案（仅供审查，**未启用**）
+# GitHub Pages 部署提案（历史草案）
 
 ## 状态
 
-- **未**在 GitHub 启用 Pages
-- **未**自动部署；工作流仅 `workflow_dispatch`（无 `pull_request` / `push` 触发）
-- CI 主流程仍使用 registry **`portico-ui@0.1.0`**
+- 正式部署工作流见 **`.github/workflows/pages-deploy.yml`** 与 [`GITHUB_PAGES_DEPLOY.md`](./GITHUB_PAGES_DEPLOY.md)（独立补丁 PR）。
+- 本文件保留路由/base 设计说明；**不在此 PR 合并前假设 Pages 已启用或已部署**。
+- 依赖：**`portico-ui@0.1.2`**
 
 ## 路由方案
 
