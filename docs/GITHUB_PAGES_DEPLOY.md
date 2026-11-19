@@ -9,9 +9,10 @@
 | `pages-preview-proposal.yml` | 仅 `workflow_dispatch`（历史提案） | **否** |
 
 - **无** `pull_request_target`；**`pages-deploy.yml` 不在 PR 上运行**。
-- **`build-and-verify`**：全程仅 `contents: read`；产物用 `actions/upload-artifact`（非 Pages OIDC）。
-- **`deploy`**：仅此 job 持有 `pages: write` + `id-token: write`（无 `contents`）；在此执行 `configure-pages`、`upload-pages-artifact`、`deploy-pages`。
-- 官方 `upload-pages-artifact` 需 Pages/OIDC 写权限，故不在 build job 调用（见 [upload-pages-artifact](https://github.com/actions/upload-pages-artifact)）。
+- **`build-and-verify`**：全程仅 `contents: read`；`npm ci`/test/build/smoke 阶段不授 `pages:write`/`id-token:write`；staging 用 `actions/upload-artifact`。
+- **`deploy`**：仅此 job 持有 `pages: write` + `id-token: write`（无 `contents`、无 `actions:write`）。
+- **权限勘误**：[`upload-pages-artifact@v3`](https://github.com/actions/upload-pages-artifact) 为 tar + `upload-artifact` 的 composite，**本体不**要求 `pages:write`/OIDC；**`deploy-pages`** 才硬性需要 Pages/OIDC。为最小权限，elevated token 仅覆盖 deploy job（含 `configure-pages`、`upload-pages-artifact`、`deploy-pages`）。
+- **Concurrency**：workflow 级 `cancel-in-progress: false`，避免新 run 取消在途 **deploy**（job 级 `false` 无法抵消 workflow 级 `true`）。
 - `workflow_dispatch` 在非 `main` ref：job `if` 跳过。
 
 ## 同 revision 门禁
