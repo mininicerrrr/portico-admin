@@ -50,6 +50,7 @@ npm run typecheck && npm test && npm run build
 # 另开终端: npm run dev -- --host 127.0.0.1 --port 5173
 npm install --no-save playwright@1.49.0   # 不写入 lock 时可选用
 node scripts/candidate-regression.mjs
+node scripts/capture-ui-regression.mjs   # 视口截图 + 表格重叠检测（非终审）
 
 # 5) 恢复正式 npm 包
 npm ci
@@ -103,9 +104,18 @@ npm ci
 
 ### 4. 设计签收状态
 
-**设计师视觉审计：待完成**。本报告 **不构成** 最终视觉批准。
+**设计师视觉审计：`ccd5058` 未通过视觉签收**（表格溢出问题在组件独立演示中亦可复现；组件侧正在修库 / disabled·loading 等）。**预计将有新 tarball 再做终审。**
 
-## 最近一次自动化结果（ccd5058）
+**`final verification complete` = 否** — 令牌/构建通过不等于视觉验收。
+
+### 5. 库侧待定（仅记录，admin 不改库源码）
+
+|  topic | 说明 |
+| --- | --- |
+| `PtTable` 文本省略 API | 当前 `TableColumn` 仅有 `width`/`minWidth`/`formatter`/`slot`，**无** `showOverflowTooltip` / `ellipsis`；`table-layout:fixed` 下 `td` 默认不裁切文本。Admin 用 **插槽 + `TableEllipsisCell`** 与 **固定列宽** + **`pt-table__wrap` 横向滚动** 集成。 |
+| disabled / loading 样式 | 组件工作流处理中；admin 不重复修改。 |
+
+## 最近一次自动化结果（ccd5058，非终审）
 
 - `typecheck` / `test` (7) / `build`：**通过**（候选覆盖 `node_modules` 后）
 - `scripts/candidate-regression.mjs`：**通过**（路由、用户筛选/排序/分页/抽屉、表单校验、主题、窄屏导航）

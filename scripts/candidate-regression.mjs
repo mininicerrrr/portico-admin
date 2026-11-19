@@ -162,7 +162,8 @@ try {
       commit: 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd',
       supersedes: 'cd9a003f5a6cad0c58ede57b2830d660258e628a',
     },
-    designerVisualAudit: 'pending',
+    designerVisualAudit: 'ccd5058 not accepted — component/demo investigating overflow',
+    finalVerificationComplete: false,
     finalApproval: false,
     trackedDependency: 'portico-ui@0.1.0 (npm registry only)',
     adminHostCollision: {

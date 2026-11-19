@@ -19,6 +19,7 @@ import {
 import { demoUsersSeed } from '../data/demoUsers'
 import type { DemoUser, UserRole, UserStatus } from '../types/user'
 import { filterUsers, paginateUsers } from '../utils/userFilters'
+import TableEllipsisCell from '../components/TableEllipsisCell.vue'
 
 const users = ref<DemoUser[]>(demoUsersSeed.map((u) => ({ ...u })))
 
@@ -40,14 +41,15 @@ const editForm = reactive({
   department: '',
 })
 
+/** 固定列宽 + 横向滚动（PtTable `pt-table__wrap` overflow:auto），文本列用插槽省略 */
 const columns = computed<TableColumn[]>(() => [
-  { prop: 'name', label: '姓名', minWidth: 120, sortable: 'custom' },
-  { prop: 'email', label: '邮箱', minWidth: 200, sortable: 'custom' },
-  { prop: 'department', label: '部门', minWidth: 100, sortable: 'custom' },
+  { prop: 'name', label: '姓名', width: 132, sortable: 'custom', slot: 'name' },
+  { prop: 'email', label: '邮箱', width: 260, sortable: 'custom', slot: 'email' },
+  { prop: 'department', label: '部门', width: 96, sortable: 'custom', slot: 'department' },
   { prop: 'role', label: '角色', width: 96, sortable: 'custom', slot: 'role' },
-  { prop: 'status', label: '状态', width: 96, sortable: 'custom', slot: 'status' },
-  { prop: 'lastLogin', label: '最近登录（演示）', minWidth: 160, sortable: 'custom' },
-  { prop: 'actions', label: '操作', width: 100, slot: 'actions' },
+  { prop: 'status', label: '状态', width: 88, sortable: 'custom', slot: 'status' },
+  { prop: 'lastLogin', label: '最近登录（演示）', width: 184, sortable: 'custom', slot: 'lastLogin' },
+  { prop: 'actions', label: '操作', width: 96, slot: 'actions' },
 ])
 
 const filteredUsers = computed(() =>
@@ -173,6 +175,18 @@ function saveEdit() {
       row-key="id"
       @sort-change="onSortChange"
     >
+      <template #name="{ value }">
+        <TableEllipsisCell :value="value as string" />
+      </template>
+      <template #email="{ value }">
+        <TableEllipsisCell :value="value as string" />
+      </template>
+      <template #department="{ value }">
+        <TableEllipsisCell :value="value as string" />
+      </template>
+      <template #lastLogin="{ value }">
+        <TableEllipsisCell :value="value as string" />
+      </template>
       <template #role="{ row }">
         <PtTag :type="row.role === 'admin' ? 'primary' : row.role === 'editor' ? 'warning' : 'info'" effect="light">
           {{ roleLabel(row.role as UserRole) }}
