@@ -159,10 +159,16 @@ try {
     candidate: {
       repo: 'mininicerrrr/portico-ui',
       pr: 2,
-      commit: 'b1901ae3e2afc547a054151379b603be92d40fb5',
-      supersedes: '4bcf938b0bca4d37ece836eaff1a714002db880f',
+      ref: 'f84d4bd',
+      tarballSha256:
+        'cb01d7eccf4ecfe438c0b89bb6c5ac723a2071f309b503d6d7db0974488ad7fa',
+      tarballFile: 'portico-ui-0.1.0_a58a.tgz',
+      tarballSha256Verified: true,
+      implementationSourceCommitSha: 'f84d4bd76e76daa7ead98d4b7a5fe0b442fecc78',
+      porticoUiBranchHeadCommitSha: 'fb0916777b40becdca1f39e4d12b16559e57de01',
     },
-    designerVisualAudit: 'designer re-audit underway on b1901ae — not product approval',
+    designerVisualAudit:
+      'targeted review: visible blockers cleared for USER review (not user final approval / merge / release / npm)',
     finalVerificationComplete: false,
     finalApproval: false,
     trackedDependency: 'portico-ui@0.1.0 (npm registry only)',

@@ -44,7 +44,13 @@ const editForm = reactive({
 /** 固定列宽 + 横向滚动（PtTable `pt-table__wrap` overflow:auto），文本列用插槽省略 */
 const columns = computed<TableColumn[]>(() => [
   { prop: 'name', label: '姓名', width: 132, sortable: 'custom', slot: 'name' },
-  { prop: 'email', label: '邮箱', width: 260, sortable: 'custom', slot: 'email' },
+  {
+    prop: 'email',
+    label: '邮箱',
+    width: 260,
+    sortable: 'custom',
+    showOverflowTooltip: true,
+  } as TableColumn,
   { prop: 'department', label: '部门', width: 96, sortable: 'custom', slot: 'department' },
   { prop: 'role', label: '角色', width: 96, sortable: 'custom', slot: 'role' },
   { prop: 'status', label: '状态', width: 88, sortable: 'custom', slot: 'status' },
@@ -176,9 +182,6 @@ function saveEdit() {
       @sort-change="onSortChange"
     >
       <template #name="{ value }">
-        <TableEllipsisCell :value="value as string" />
-      </template>
-      <template #email="{ value }">
         <TableEllipsisCell :value="value as string" />
       </template>
       <template #department="{ value }">

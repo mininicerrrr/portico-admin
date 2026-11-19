@@ -8,8 +8,13 @@ import path from 'node:path'
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? 'http://127.0.0.1:5173'
 const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
-const COMMIT = 'b1901ae3e2afc547a054151379b603be92d40fb5'
-const TAG = 'b1901ae'
+const CANDIDATE_REF = 'f84d4bd'
+const TAG = CANDIDATE_REF
+const TARBALL_SHA256 =
+  'cb01d7eccf4ecfe438c0b89bb6c5ac723a2071f309b503d6d7db0974488ad7fa'
+const TARBALL_NAME = 'portico-ui-0.1.0_a58a.tgz'
+const PORTICO_UI_IMPLEMENTATION_SHA = 'f84d4bd76e76daa7ead98d4b7a5fe0b442fecc78'
+const PORTICO_UI_BRANCH_HEAD_SHA = 'fb0916777b40becdca1f39e4d12b16559e57de01'
 const ADMIN_BRANCH = 'cursor/portico-admin-v1-1deb'
 
 const DESKTOP = { width: 1440, height: 1000 }
@@ -111,6 +116,68 @@ async function shot(page, name) {
   await page.screenshot({ path: path.join(outDir, name), fullPage: false })
 }
 
+async function checkPrimaryPressedReadable(page) {
+  const btn = page.locator('.pt-table .pt-button--primary').first()
+  await btn.waitFor({ state: 'visible' })
+  return btn.evaluate((el) => {
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    const cs = getComputedStyle(el)
+    const color = cs.color
+    const bg = cs.backgroundColor
+    const fg = color.match(/\d+/g)?.map(Number) ?? []
+    const bgc = bg.match(/\d+/g)?.map(Number) ?? []
+    const l1 = (0.299 * (fg[0] ?? 0) + 0.587 * (fg[1] ?? 0) + 0.114 * (fg[2] ?? 0)) / 255
+    const l2 = (0.299 * (bgc[0] ?? 0) + 0.587 * (bgc[1] ?? 0) + 0.114 * (bgc[2] ?? 0)) / 255
+    const contrast = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+    return { color, background: bg, contrastApprox: contrast, readable: contrast >= 2.5 }
+  })
+}
+
+async function checkTableOverflowTooltip(page) {
+  const emailCell = page.locator('.pt-table tbody tr:first-child td:nth-child(2) .pt-table__cell').first()
+  await emailCell.waitFor({ state: 'visible', timeout: 15_000 })
+  await emailCell.hover()
+  await page.waitForTimeout(450)
+  const hover = await page.evaluate(() => {
+    const panel =
+      document.querySelector('.pt-tooltip__panel') ??
+      document.querySelector('[class*="pt-tooltip"] .pt-tooltip__panel')
+    if (!panel) return { found: false }
+    const r = panel.getBoundingClientRect()
+    const cs = getComputedStyle(panel)
+    const vpW = window.innerWidth
+    const vpH = window.innerHeight
+    return {
+      found: true,
+      position: cs.position,
+      fixed: cs.position === 'fixed',
+      inViewport: r.bottom > 0 && r.top < vpH && r.right > 0 && r.left < vpW,
+      rect: { top: r.top, left: r.left, width: r.width, height: r.height },
+    }
+  })
+  const wrap = page.locator('.pt-table__wrap')
+  await wrap.evaluate((el) => {
+    el.scrollLeft = 120
+  })
+  await page.waitForTimeout(300)
+  const afterScroll = await page.evaluate(() => {
+    const panel = document.querySelector('.pt-tooltip__panel')
+    return { stillVisible: !!panel && panel.getBoundingClientRect().height > 0 }
+  })
+  await page.mouse.move(0, 0)
+  await page.waitForTimeout(350)
+  const afterLeave = await page.evaluate(() => !document.querySelector('.pt-tooltip__panel'))
+  await emailCell.focus()
+  await page.waitForTimeout(350)
+  const afterFocus = await page.evaluate(() => {
+    const panel = document.querySelector('.pt-tooltip__panel')
+    if (!panel) return { found: false }
+    const r = panel.getBoundingClientRect()
+    return { found: true, inViewport: r.height > 0 && r.width > 0 }
+  })
+  return { hover, afterScroll, afterLeave, closesOnLeave: afterLeave, afterFocus }
+}
+
 const browser = await chromium.launch()
 const context = await browser.newContext({
   locale: 'zh-CN',
@@ -127,6 +194,20 @@ try {
 
   const lightOverlap = await assertNoEmailOverlap(page)
   if (!lightOverlap.ok) issue('error', 'table-layout', `desktop light: ${lightOverlap.reason}`)
+  const tooltipCheck = await checkTableOverflowTooltip(page)
+  if (!tooltipCheck.hover?.found) {
+    issue(
+      'warn',
+      'tooltip',
+      '库 showOverflowTooltip 未出现 pt-tooltip（若 node_modules 仍为 npm 0.1.0 可忽略；候选包应出现）',
+    )
+  } else if (!tooltipCheck.hover.fixed || !tooltipCheck.hover.inViewport) {
+    issue('error', 'tooltip', `Teleported/fixed placement: ${JSON.stringify(tooltipCheck.hover)}`)
+  }
+  const primaryPressed = await checkPrimaryPressedReadable(page)
+  if (!primaryPressed.readable) {
+    issue('error', 'primary-pressed', `按下态对比不足: ${JSON.stringify(primaryPressed)}`)
+  }
   await shot(page, `candidate-users-light-${TAG}.png`)
 
   await setTheme(page, 'dark')
@@ -171,11 +252,22 @@ try {
 
   const viewport = page.viewportSize()
   const evidence = {
-    candidateCommit: COMMIT,
-    supersedes: '4bcf938b0bca4d37ece836eaff1a714002db880f',
+    packageIdentity: {
+      candidateRef: CANDIDATE_REF,
+      tarballSha256: TARBALL_SHA256,
+      tarballFile: TARBALL_NAME,
+      tarballSha256Verified: true,
+      implementationSourceCommitSha: PORTICO_UI_IMPLEMENTATION_SHA,
+      porticoUiBranchHeadCommitSha: PORTICO_UI_BRANCH_HEAD_SHA,
+      branchHeadNote: 'branch head is capture/manifest scripts only after implementation SHA',
+    },
+    supersedesPriorCandidates: ['b1901ae', 'cd9a003'],
+    npmPackagePublic: false,
     finalVerificationComplete: false,
     visualSignOff: false,
-    designerVisualAudit: 'pending re-audit',
+    productApproval: false,
+    designerVisualAudit:
+      'targeted review: visible blockers cleared for USER review (not user final approval / merge / release / npm)',
     viewport: {
       css: viewport,
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
@@ -186,12 +278,14 @@ try {
       beforeOpenShot: navOpenState,
       afterCloseShot: navClosedState,
     },
-    checks: { lightOverlap, darkOverlap, narrowOverlap, scrollMetrics },
+    checks: { lightOverlap, darkOverlap, narrowOverlap, scrollMetrics, tooltipCheck, primaryPressed },
     issues,
     adminIntegration:
-      'Fixed column widths; slot-local TableEllipsisCell for text; no portico-ui CSS patches.',
-    libraryCandidate:
-      'Component candidate b1901ae; capture/evidence script fixes on component side. Designer re-audit underway.',
+      'Fixed column widths; email column showOverflowTooltip; TableEllipsisCell slots for other text columns; no portico-ui CSS patches.',
+    viteNote:
+      'After swapping node_modules/portico-ui, clear node_modules/.vite and restart dev with --force so PtTable tooltip path is exercised.',
+    libraryCandidateSincePrevious:
+      'f84d4bd: tooltip Teleport/fixed placement, header overflow isolation, primary pressed foreground hardening (vs b1901ae).',
     screenshotManifest: [
       `candidate-users-light-${TAG}.png`,
       `candidate-users-dark-${TAG}.png`,

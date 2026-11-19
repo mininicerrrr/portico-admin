@@ -9,8 +9,11 @@
 | 项 | 值 |
 | --- | --- |
 | portico-ui PR | https://github.com/mininicerrrr/portico-ui/pull/2 |
-| **Commit（当前验证）** | `b1901ae3e2afc547a054151379b603be92d40fb5` |
-| 取代 | `4bcf938…`、`ccd5058…`、`cd9a003…`（已作废） |
+| **候选短 ref** | `f84d4bd` |
+| **验证用 tarball SHA256** | `cb01d7eccf4ecfe438c0b89bb6c5ac723a2071f309b503d6d7db0974488ad7fa`（附件 `portico-ui-0.1.0_a58a.tgz`，本地 `sha256sum` 已核对一致） |
+| **implementationSourceCommitSha** | `f84d4bd76e76daa7ead98d4b7a5fe0b442fecc78`（实现本体） |
+| **portico-ui 分支 HEAD（仅 capture/manifest 脚本）** | `fb0916777b40becdca1f39e4d12b16559e57de01` |
+| 取代 | `b1901ae…`、`cd9a003…` 及更早候选（已作废） |
 | 包内版本字段 | `0.1.0`（与 npm 同号，**内容不同**） |
 
 从 PR CI / 附件 tarball（例如 `portico-ui-0.1.0.tgz`）解压，**勿提交进本仓库**。
@@ -104,7 +107,7 @@ npm ci
 
 ### 4. 设计签收状态
 
-**设计师视觉审计：`b1901ae` 复审进行中**（**尚无产品批准** / `finalVerificationComplete: false`）（表格溢出问题在组件独立演示中亦可复现；组件侧正在修库 / disabled·loading 等）。**预计将有新 tarball 再做终审。**
+**设计师 targeted 复审：可见阻断项已清，供 USER 复审**（**尚无用户最终批准** / `finalVerificationComplete: false`；**非** merge / release / npm）。
 
 **`final verification complete` = 否** — 令牌/构建通过不等于视觉验收。
 
@@ -119,10 +122,18 @@ npm ci
 
 `capture-ui-regression.mjs` 在 **narrow closed** 截图前必须断言：`admin-sidebar-backdrop` 不存在、`.admin-sidebar.is-open` 为假、侧栏不覆盖 `admin-main`（通过 **菜单** 按钮关闭，必要时重试）。证据 JSON 记录 `viewport` + `deviceScaleFactor` 与 `mobileNav` 状态。
 
-## 最近一次自动化结果（b1901ae，非终审）
+## 最近一次自动化结果（f84d4bd + tarball SHA256，非终审）
 
-- `typecheck` / `test` (7) / `build`：**通过**（候选覆盖 `node_modules` 后）
-- `scripts/candidate-regression.mjs`：**通过**（路由、用户筛选/排序/分页/抽屉、表单校验、主题、窄屏导航）
-- 亮色令牌：`#3473ce`、`6px`、`1px`、`#f6f8fb`、主按钮无 lintel
-- 暗色 `--pt-bg-page`：`#111a27`；窄屏暗色 `admin-shell` 背景 `rgb(17,26,39)`；表头约 `rgb(31,45,64)`
-- 字体栈首项：`"Noto Sans SC"`
+> 临时覆盖 `node_modules/portico-ui` 后请 **`rm -rf node_modules/.vite`** 并 **`vite --force`** 重启 dev，否则可能仍预构建旧 npm 包（表格 `showOverflowTooltip` 路径不生效）。
+
+**Admin 证据 SHA（本轮回归时）**：`20b39bd7970500eef77bb5157db15f4e7fb8074a`（提交证据脚本/文档后会变）
+
+**闸门**：`typecheck` / `test` (7) / `build` — 通过（tarball 已装 `node_modules`，SHA256 与上表一致）
+
+**`candidate-regression.mjs`**：通过（路由、筛选/排序/分页/抽屉、表单校验 3 条、主题、窄屏导航）；令牌亮色 `#3473ce` / `6px` / `#f6f8fb`，暗色 `#111a27`；字体栈首项 `"Noto Sans SC"`
+
+**`capture-ui-regression.mjs`**：截图见 `/opt/cursor/artifacts/*-f84d4bd.png` 与 `candidate-ui-regression-f84d4bd.json`；邮箱列 `showOverflowTooltip`：**hover 时 Teleport + `position:fixed` 且在视口内**；窄屏 nav open/closed 断言通过（open `37782` B vs closed `76916` B，非同图）
+
+**自动化仍记录的诚实问题（非设计签收结论）**：
+- **Primary 按下态**：`mousedown` 采样下文案/背景近似对比 **~2.24**（脚本阈值 2.5，`readable: false`）— 与设计师「可见阻断已清」并行，供 USER 看截图与 JSON
+- **Tooltip 离开/聚焦**：`closesOnLeave: false`（DOM 仍留 panel 节点）；`afterFocus.inViewport: false` — 需人工对照截图，未见表格裁切回归
