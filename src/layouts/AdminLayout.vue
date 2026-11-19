@@ -67,7 +67,7 @@ watch(
 </script>
 
 <template>
-  <div class="admin-shell pt-theme">
+  <div class="admin-shell pt-theme" :data-pt-theme="isDark ? 'dark' : undefined">
     <aside
       class="admin-sidebar"
       :class="{

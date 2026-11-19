@@ -51,7 +51,13 @@ src/
 
 ## 主题
 
-暗色遵循 portico-ui：`html.pt-dark` / `[data-pt-theme="dark"]`。偏好键：`portico-admin-theme`。
+暗色遵循 portico-ui：`html.pt-dark`；应用在 `pt-theme` 根壳层使用 `[data-pt-theme="dark"]`（见 `AdminLayout`）。偏好键：`portico-admin-theme`。
+
+字体：通过 `@fontsource/noto-sans-sc`（OFL）自托管 Noto Sans SC 400/500。
+
+## 候选 portico-ui 包验证
+
+新版组件库合并前，可用 tarball 临时冒烟，**不**改动 `package.json` 跟踪依赖：见 [docs/PORTICO_UI_CANDIDATE_VALIDATION.md](./docs/PORTICO_UI_CANDIDATE_VALIDATION.md)。
 
 ## 数据与鉴权
 

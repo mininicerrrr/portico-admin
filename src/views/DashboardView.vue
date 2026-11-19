@@ -33,8 +33,8 @@ const recent = computed(() => demoUsersSeed.slice(0, 5))
   />
 
   <p class="page-intro">
-    欢迎使用 Portico Admin v1。该外壳使用 <strong>portico-ui@0.1.0</strong> 的门楣/门槛视觉（石色纸面
-    <code>#f3f1ec</code>、墨色画布 <code>#0d0e11</code>、主色 <code>#3b7ddd</code>）。
+    欢迎使用 Portico Admin v1。样式完全来自已安装的 <strong>portico-ui</strong> 包及其导出的
+    <code>portico-ui/style.css</code>（<code>--pt-*</code> 设计令牌），本应用不覆盖组件库视觉。
   </p>
 
   <div class="stats-grid">

@@ -51,7 +51,13 @@ src/
 
 ## Theming
 
-Dark mode follows portico-ui: `html.pt-dark` / `[data-pt-theme="dark"]`. Preference key: `portico-admin-theme`.
+Dark mode follows portico-ui: `html.pt-dark` and, on the app shell `pt-theme` root, `[data-pt-theme="dark"]` (see layout). Preference key: `portico-admin-theme`.
+
+Typography uses self-hosted **Noto Sans SC** via `@fontsource/noto-sans-sc` (OFL).
+
+## Candidate package validation (portico-ui PRs)
+
+Before a new portico-ui release, use a tarball **without** changing tracked dependencies: [docs/PORTICO_UI_CANDIDATE_VALIDATION.md](./docs/PORTICO_UI_CANDIDATE_VALIDATION.md).
 
 ## Data & auth
 
