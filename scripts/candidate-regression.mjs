@@ -159,7 +159,15 @@ try {
     candidate: {
       repo: 'mininicerrrr/portico-ui',
       pr: 2,
-      commit: 'cd9a003f5a6cad0c58ede57b2830d660258e628a',
+      commit: 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd',
+      supersedes: 'cd9a003f5a6cad0c58ede57b2830d660258e628a',
+    },
+    designerVisualAudit: 'pending',
+    finalApproval: false,
+    trackedDependency: 'portico-ui@0.1.0 (npm registry only)',
+    adminHostCollision: {
+      vitepressPresent: false,
+      note: 'Prior white/narrow table snapshot was VitePress docs host CSS, not admin.',
     },
     verifiedAt: new Date().toISOString(),
     admin: 'portico-admin',
