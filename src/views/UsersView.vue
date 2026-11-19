@@ -241,7 +241,7 @@ function saveEdit() {
             :model-value="editForm.status === 'active'"
             active-text="已开启"
             inactive-text="已关闭"
-            @update:model-value="(v) => (editForm.status = v ? 'active' : 'inactive')"
+            @update:model-value="(v: boolean) => (editForm.status = v ? 'active' : 'inactive')"
           />
         </PtFormItem>
       </PtForm>

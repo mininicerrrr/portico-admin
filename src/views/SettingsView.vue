@@ -45,7 +45,7 @@ function savePreferences() {
       <PtFormItem label="颜色模式">
         <PtRadioGroup
           :model-value="theme"
-          @update:model-value="(v) => onThemePick(v === 'dark' ? 'dark' : 'light')"
+          @update:model-value="(v: string) => onThemePick(v === 'dark' ? 'dark' : 'light')"
         >
           <PtRadio label="亮色" value="light" />
           <PtRadio label="暗色" value="dark" />
@@ -56,7 +56,7 @@ function savePreferences() {
           :model-value="theme === 'dark'"
           active-text="暗色"
           inactive-text="亮色"
-          @update:model-value="(v) => onThemePick(v ? 'dark' : 'light')"
+          @update:model-value="(v: boolean) => onThemePick(v ? 'dark' : 'light')"
         />
       </PtFormItem>
     </PtForm>

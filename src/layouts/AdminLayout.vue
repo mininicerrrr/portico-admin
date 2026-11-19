@@ -130,7 +130,7 @@ watch(
           active-text="暗色"
           inactive-text="亮色"
           aria-label="切换明暗主题"
-          @update:model-value="(v) => setTheme(v ? 'dark' : 'light')"
+          @update:model-value="(v: boolean) => setTheme(v ? 'dark' : 'light')"
         />
       </header>
 
