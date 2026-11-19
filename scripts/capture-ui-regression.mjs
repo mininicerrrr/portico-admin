@@ -8,8 +8,9 @@ import path from 'node:path'
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? 'http://127.0.0.1:5173'
 const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
-const COMMIT = '4bcf938b0bca4d37ece836eaff1a714002db880f'
-const TAG = '4bcf938'
+const COMMIT = 'b1901ae3e2afc547a054151379b603be92d40fb5'
+const TAG = 'b1901ae'
+const ADMIN_BRANCH = 'cursor/portico-admin-v1-1deb'
 
 const DESKTOP = { width: 1440, height: 1000 }
 const NARROW = { width: 390, height: 844 }
@@ -171,7 +172,7 @@ try {
   const viewport = page.viewportSize()
   const evidence = {
     candidateCommit: COMMIT,
-    supersedes: 'ccd5058cf8277579dd38bc17bdb0915e6b6481fd',
+    supersedes: '4bcf938b0bca4d37ece836eaff1a714002db880f',
     finalVerificationComplete: false,
     visualSignOff: false,
     designerVisualAudit: 'pending re-audit',
@@ -189,8 +190,19 @@ try {
     issues,
     adminIntegration:
       'Fixed column widths; slot-local TableEllipsisCell for text; no portico-ui CSS patches.',
-    library4bcf938:
-      'Default cells + colgroup + PtTableEllipsisCell export; disabled neutral + loading label fixes. Re-audit pending.',
+    libraryCandidate:
+      'Component candidate b1901ae; capture/evidence script fixes on component side. Designer re-audit underway.',
+    screenshotManifest: [
+      `candidate-users-light-${TAG}.png`,
+      `candidate-users-dark-${TAG}.png`,
+      `candidate-form-light-${TAG}.png`,
+      `candidate-form-dark-${TAG}.png`,
+      `candidate-narrow-dark-nav-${TAG}.png`,
+      `candidate-users-narrow-closed-${TAG}.png`,
+      `candidate-ui-regression-${TAG}.json`,
+    ],
+    adminRepo: 'mininicerrrr/portico-admin',
+    adminGitSha: process.env.ADMIN_GIT_SHA ?? null,
   }
 
   const jsonPath = path.join(outDir, `candidate-ui-regression-${TAG}.json`)
