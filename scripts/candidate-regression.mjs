@@ -162,9 +162,14 @@ try {
       preparedVersion: '0.1.1',
       preparedVersionPublic: false,
       tarballSha256:
-        '9bba3c4842f569b8bd3b17fc7fd731cd35244fc5bef3a31e350f17658d87befd',
-      tarballFile: 'portico-ui-0.1.1_a95f.tgz',
-      implementationSourceCommitSha: 'b72f0341e537881640795d2d4e2e48d6dcd425c8',
+        process.env.CANDIDATE_TARBALL_SHA256 ??
+        '3fd6e3a37724431bc2cf609fbbdd13380e81275c629b162f4c182600837648cd',
+      tarballFile: process.env.CANDIDATE_TARBALL_FILE ?? 'portico-ui-0.1.1_e702.tgz',
+      implementationSourceCommitSha:
+        process.env.PORTICO_UI_IMPLEMENTATION_SHA ??
+        '61bedc17142d1afe11a5b7345b34bb5b5c05e2b1',
+      porticoUiEvidenceScriptHead:
+        process.env.PORTICO_UI_EVIDENCE_SCRIPT_HEAD ?? 'a614c7b63ca6f778d7fc77d6e940b459b1cf5dd1',
     },
     designerVisualAudit:
       'P2 0.1.1 candidate; Lead re-review in progress — not user final approval / merge / release / npm',

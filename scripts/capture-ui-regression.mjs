@@ -9,11 +9,18 @@ import { createPorticoUiResponseCollector, hashInstalledPorticoUi } from './runt
 
 const baseUrl = process.env.SCREENSHOT_BASE_URL ?? 'http://127.0.0.1:5173'
 const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
-const TAG = 'b72f034'
+const TAG = process.env.CANDIDATE_TAG ?? '61bedc'
 const TARBALL_SHA256 =
-  '9bba3c4842f569b8bd3b17fc7fd731cd35244fc5bef3a31e350f17658d87befd'
-const TARBALL_NAME = 'portico-ui-0.1.1_a95f.tgz'
-const PORTICO_UI_IMPLEMENTATION_SHA = 'b72f0341e537881640795d2d4e2e48d6dcd425c8'
+  process.env.CANDIDATE_TARBALL_SHA256 ??
+  '3fd6e3a37724431bc2cf609fbbdd13380e81275c629b162f4c182600837648cd'
+const TARBALL_NAME = process.env.CANDIDATE_TARBALL_FILE ?? 'portico-ui-0.1.1_e702.tgz'
+const PORTICO_UI_IMPLEMENTATION_SHA =
+  process.env.PORTICO_UI_IMPLEMENTATION_SHA ??
+  '61bedc17142d1afe11a5b7345b34bb5b5c05e2b1'
+const PORTICO_UI_EVIDENCE_SCRIPT_HEAD =
+  process.env.PORTICO_UI_EVIDENCE_SCRIPT_HEAD ?? 'a614c7b63ca6f778d7fc77d6e940b459b1cf5dd1'
+const DELTA_CAPTURE = process.env.CAPTURE_DELTA === '1'
+const INHERITED_VISUAL_TAG = 'b72f034'
 const PORTICO_UI_PREPARED_VERSION = '0.1.1'
 const TRACKED_NPM_DEPENDENCY = 'portico-ui@0.1.0'
 const ADMIN_BRANCH = 'cursor/portico-admin-v1-1deb'
@@ -182,6 +189,17 @@ async function checkSortableHeaderKeyboard(page) {
   await th.waitFor({ state: 'visible' })
   const before = await th.getAttribute('aria-sort')
   await th.focus()
+  const focusRing = await th.evaluate((el) => {
+    if (el !== document.activeElement) return { focused: false }
+    const cs = getComputedStyle(el)
+    return {
+      focused: true,
+      outlineWidth: cs.outlineWidth,
+      outlineStyle: cs.outlineStyle,
+      boxShadow: cs.boxShadow,
+      hasVisibleRing: cs.outlineWidth !== '0px' || (cs.boxShadow && cs.boxShadow !== 'none'),
+    }
+  })
   await page.keyboard.press('Enter')
   await page.waitForTimeout(120)
   const afterEnter = await th.getAttribute('aria-sort')
@@ -190,6 +208,7 @@ async function checkSortableHeaderKeyboard(page) {
   const afterSpace = await th.getAttribute('aria-sort')
   return {
     focusable: await th.evaluate((el) => el === document.activeElement || el.contains(document.activeElement)),
+    focusRing,
     before,
     afterEnter,
     afterSpace,
@@ -353,6 +372,9 @@ async function checkTableOverflowTooltip(page) {
       }
     })
     const popupOnFocus = await readVisibleTooltipPanel(page)
+    if (DELTA_CAPTURE && popupOnFocus.panelVisible) {
+      await shot(page, `candidate-delta-focus-tooltip-${TAG}.png`)
+    }
     await page.keyboard.press('Escape')
     await page.waitForTimeout(120)
     const afterEscape = await readVisibleTooltipPanel(page)
@@ -408,7 +430,7 @@ try {
   const cleanBaseline = await assertCleanUsersBaseline(page)
   if (!cleanBaseline.ok) {
     issue('error', 'screenshot-baseline', `users 页存在遮罩/抽屉: ${JSON.stringify(cleanBaseline)}`)
-  } else {
+  } else if (!DELTA_CAPTURE) {
     await shot(page, `candidate-users-light-${TAG}.png`)
   }
 
@@ -454,14 +476,22 @@ try {
     issue('error', 'tooltip', `Escape 未关闭 overflow tooltip: ${JSON.stringify(tooltipCheck.keyboardOverflow)}`)
   }
 
-  const primaryContrast = await checkPrimaryButtonContrast(page)
-  if (primaryContrast.active.activePseudoApplied === false) {
+  const focusTooltipShot = DELTA_CAPTURE
+    ? {
+        captured: tooltipCheck.keyboardOverflow?.popupOnFocus?.panelVisible === true,
+        inheritedFromCaptureStep: 'tooltip keyboard focus before Escape',
+        popupOnFocus: tooltipCheck.keyboardOverflow?.popupOnFocus,
+      }
+    : null
+
+  const primaryContrast = DELTA_CAPTURE ? null : await checkPrimaryButtonContrast(page)
+  if (primaryContrast?.active.activePseudoApplied === false) {
     issue(
       'warn',
       'primary-pressed',
       `未命中 :active（采样可能仍为 idle）；idle=${primaryContrast.idle.background} active=${primaryContrast.active.background}`,
     )
-  } else if (!primaryContrast.active.wcagAAPass) {
+  } else if (primaryContrast && !primaryContrast.active.wcagAAPass) {
     issue(
       'error',
       'primary-pressed',
@@ -473,45 +503,53 @@ try {
     await page.waitForTimeout(300)
   }
 
-  await setTheme(page, 'dark')
-  await page.reload({ waitUntil: 'networkidle' })
-  const darkOverlap = await assertNoEmailOverlap(page)
-  if (!darkOverlap.ok) issue('error', 'table-layout', `desktop dark: ${darkOverlap.reason}`)
-  await shot(page, `candidate-users-dark-${TAG}.png`)
+  let darkOverlap = { ok: true, skipped: true }
+  let narrowOverlap = { ok: true, skipped: true }
+  let scrollMetrics = null
+  let navOpenState = { skipped: true, inheritedFrom: INHERITED_VISUAL_TAG }
+  let navClosedState = { skipped: true, closed: true, inheritedFrom: INHERITED_VISUAL_TAG }
 
-  await setTheme(page, 'light')
-  await page.goto(`${baseUrl}/form-demo`, { waitUntil: 'networkidle' })
-  await shot(page, `candidate-form-light-${TAG}.png`)
+  if (!DELTA_CAPTURE) {
+    await setTheme(page, 'dark')
+    await page.reload({ waitUntil: 'networkidle' })
+    darkOverlap = await assertNoEmailOverlap(page)
+    if (!darkOverlap.ok) issue('error', 'table-layout', `desktop dark: ${darkOverlap.reason}`)
+    await shot(page, `candidate-users-dark-${TAG}.png`)
 
-  await setTheme(page, 'dark')
-  await page.reload({ waitUntil: 'networkidle' })
-  await shot(page, `candidate-form-dark-${TAG}.png`)
+    await setTheme(page, 'light')
+    await page.goto(`${baseUrl}/form-demo`, { waitUntil: 'networkidle' })
+    await shot(page, `candidate-form-light-${TAG}.png`)
 
-  await page.setViewportSize(NARROW)
-  await setTheme(page, 'dark')
-  await page.goto(`${baseUrl}/users`, { waitUntil: 'networkidle' })
+    await setTheme(page, 'dark')
+    await page.reload({ waitUntil: 'networkidle' })
+    await shot(page, `candidate-form-dark-${TAG}.png`)
 
-  const navOpenState = await ensureMobileNavOpen(page)
-  await shot(page, `candidate-narrow-dark-nav-${TAG}.png`)
+    await page.setViewportSize(NARROW)
+    await setTheme(page, 'dark')
+    await page.goto(`${baseUrl}/users`, { waitUntil: 'networkidle' })
 
-  const navClosedState = await ensureMobileNavClosed(page)
+    navOpenState = await ensureMobileNavOpen(page)
+    await shot(page, `candidate-narrow-dark-nav-${TAG}.png`)
 
-  const scrollMetrics = await page.evaluate(() => {
-    const wrap = document.querySelector('.pt-table__wrap')
-    if (!wrap) return null
-    return {
-      scrollW: wrap.scrollWidth,
-      clientW: wrap.clientWidth,
-      canScroll: wrap.scrollWidth > wrap.clientWidth,
+    navClosedState = await ensureMobileNavClosed(page)
+
+    scrollMetrics = await page.evaluate(() => {
+      const wrap = document.querySelector('.pt-table__wrap')
+      if (!wrap) return null
+      return {
+        scrollW: wrap.scrollWidth,
+        clientW: wrap.clientWidth,
+        canScroll: wrap.scrollWidth > wrap.clientWidth,
+      }
+    })
+    if (!scrollMetrics?.canScroll) {
+      issue('warn', 'table-scroll', 'narrow closed nav: horizontal scroll not available on table wrap')
     }
-  })
-  if (!scrollMetrics?.canScroll) {
-    issue('warn', 'table-scroll', 'narrow closed nav: horizontal scroll not available on table wrap')
-  }
 
-  const narrowOverlap = await assertNoEmailOverlap(page)
-  if (!narrowOverlap.ok) issue('error', 'table-layout', `narrow closed nav: ${narrowOverlap.reason}`)
-  await shot(page, `candidate-users-narrow-closed-${TAG}.png`)
+    narrowOverlap = await assertNoEmailOverlap(page)
+    if (!narrowOverlap.ok) issue('error', 'table-layout', `narrow closed nav: ${narrowOverlap.reason}`)
+    await shot(page, `candidate-users-narrow-closed-${TAG}.png`)
+  }
 
   const viewport = page.viewportSize()
   const evidence = {
@@ -521,9 +559,27 @@ try {
       tarballSha256: TARBALL_SHA256,
       tarballFile: TARBALL_NAME,
       implementationSourceCommitSha: PORTICO_UI_IMPLEMENTATION_SHA,
+      porticoUiEvidenceScriptHead: PORTICO_UI_EVIDENCE_SCRIPT_HEAD,
       trackedNpmDependency: TRACKED_NPM_DEPENDENCY,
     },
-    supersedesPriorCandidates: ['f84d4bd', 'cb01d7ec…0.1.0 tarball'],
+    captureMode: DELTA_CAPTURE ? 'delta' : 'full',
+    inheritedVisualEvidence: DELTA_CAPTURE
+      ? {
+          priorCandidateTag: INHERITED_VISUAL_TAG,
+          priorTarballSha256: '9bba3c4842f569b8bd3b17fc7fd731cd35244fc5bef3a31e350f17658d87befd',
+          priorImplementationSha: 'b72f0341e537881640795d2d4e2e48d6dcd425c8',
+          reusedScreenshots: [
+            `candidate-users-light-${INHERITED_VISUAL_TAG}.png`,
+            `candidate-users-dark-${INHERITED_VISUAL_TAG}.png`,
+            `candidate-form-light-${INHERITED_VISUAL_TAG}.png`,
+            `candidate-form-dark-${INHERITED_VISUAL_TAG}.png`,
+            `candidate-narrow-dark-nav-${INHERITED_VISUAL_TAG}.png`,
+            `candidate-users-narrow-closed-${INHERITED_VISUAL_TAG}.png`,
+          ],
+          note: 'Clean light users + full visual matrix not re-captured on this run.',
+        }
+      : undefined,
+    supersedesPriorCandidates: ['b72f034', 'f84d4bd'],
     installedNodeModules: installedProof,
     browserLoadedPorticoUi: responseCollector.getCaptured(),
     skeletonIntegration: SKELETON_INTEGRATION,
@@ -550,9 +606,14 @@ try {
       scrollMetrics,
       sortKeyboard,
       tooltipCheck,
+      focusTooltipShot,
       primaryContrast,
-      wcagCalibration,
+      wcagCalibration: DELTA_CAPTURE ? undefined : wcagCalibration,
       cleanBaseline,
+      themeTokenSample: await page.evaluate(() => ({
+        primary: getComputedStyle(document.documentElement).getPropertyValue('--pt-color-primary').trim(),
+        mode: document.documentElement.classList.contains('pt-dark') ? 'dark' : 'light',
+      })),
     },
     issues,
     adminIntegration:
@@ -561,15 +622,21 @@ try {
       'After swapping node_modules/portico-ui, clear node_modules/.vite and restart dev with --force so PtTable tooltip path is exercised.',
     libraryCandidateSincePrevious:
       '0.1.1 P2: keyboard overflow tooltip (focus only when overflow), sort Enter/Space+aria-sort, tooltip id/aria-describedby.',
-    screenshotManifest: [
-      `candidate-users-light-${TAG}.png`,
-      `candidate-users-dark-${TAG}.png`,
-      `candidate-form-light-${TAG}.png`,
-      `candidate-form-dark-${TAG}.png`,
-      `candidate-narrow-dark-nav-${TAG}.png`,
-      `candidate-users-narrow-closed-${TAG}.png`,
-      `candidate-ui-regression-${TAG}.json`,
-    ],
+    screenshotManifest: DELTA_CAPTURE
+      ? [
+          `candidate-delta-focus-tooltip-${TAG}.png`,
+          `candidate-ui-regression-${TAG}.json`,
+          `...(inherited ${INHERITED_VISUAL_TAG} *.png)`,
+        ]
+      : [
+          `candidate-users-light-${TAG}.png`,
+          `candidate-users-dark-${TAG}.png`,
+          `candidate-form-light-${TAG}.png`,
+          `candidate-form-dark-${TAG}.png`,
+          `candidate-narrow-dark-nav-${TAG}.png`,
+          `candidate-users-narrow-closed-${TAG}.png`,
+          `candidate-ui-regression-${TAG}.json`,
+        ],
     adminRepo: 'mininicerrrr/portico-admin',
     adminGitSha: process.env.ADMIN_GIT_SHA ?? null,
   }
