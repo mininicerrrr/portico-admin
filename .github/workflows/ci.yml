@@ -18,3 +18,21 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  pages-preview-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: VITE_BASE_PATH=/portico-admin/ npm run build
+      - run: cp dist/index.html dist/404.html
+      - run: npx playwright install chromium
+      - run: npm run smoke:pages
+        env:
+          VITE_BASE_PATH: /portico-admin/

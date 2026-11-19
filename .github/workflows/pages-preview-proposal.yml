@@ -23,7 +23,7 @@ jobs:
       - run: npm run typecheck
       - run: VITE_BASE_PATH=/portico-admin/ npm run build
       - run: cp dist/index.html dist/404.html
-      - run: npx --yes playwright@1.49.0 install chromium
-      - run: node scripts/pages-preview-smoke.mjs
+      - run: npx playwright install chromium
+      - run: npm run smoke:pages
         env:
           VITE_BASE_PATH: /portico-admin/

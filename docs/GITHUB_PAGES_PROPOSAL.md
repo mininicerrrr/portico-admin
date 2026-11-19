@@ -22,8 +22,11 @@
 npm ci
 VITE_BASE_PATH=/portico-admin/ npm run build
 cp dist/index.html dist/404.html
-node scripts/pages-preview-smoke.mjs   # vite preview + 子路径直链 /users /form-demo
+npx playwright install chromium   # 浏览器二进制（playwright 已在 devDependencies）
+npm run smoke:pages               # 断言 /portico-admin/ 资源前缀 + users/form-demo 直达与刷新
 ```
+
+PR CI 含 `pages-preview-smoke` job（**无** Pages 部署权限）。
 
 ## 权衡
 

@@ -13,7 +13,8 @@
     "preview:pages": "VITE_BASE_PATH=/portico-admin/ vite preview --host 127.0.0.1 --port 4173",
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke:pages": "node scripts/pages-preview-smoke.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "5.2.8",
@@ -27,6 +28,7 @@
     "@vue/test-utils": "^2.6.0",
     "@vue/tsconfig": "^0.9.1",
     "jsdom": "^31.0.1",
+    "playwright": "1.49.0",
     "typescript": "~6.0.3",
     "vite": "^8.3.6",
     "vitest": "^5.1.1",
