@@ -1,0 +1,29 @@
+# GitHub Pages preview — PROPOSAL ONLY (not enabled; manual dispatch only).
+# Do not enable Pages in repo settings until Projects Manager approves.
+
+name: Pages preview proposal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: VITE_BASE_PATH=/portico-admin/ npm run build
+      - run: cp dist/index.html dist/404.html
+      - run: npx playwright install chromium
+      - run: npm run smoke:pages
+        env:
+          VITE_BASE_PATH: /portico-admin/

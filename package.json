@@ -1,0 +1,38 @@
+{
+  "name": "portico-admin",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Portico Admin v1 — demo admin shell built on portico-ui",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "build:pages": "VITE_BASE_PATH=/portico-admin/ npm run build",
+    "preview": "vite preview",
+    "preview:pages": "VITE_BASE_PATH=/portico-admin/ vite preview --host 127.0.0.1 --port 4173",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke:pages": "node scripts/pages-preview-smoke.mjs",
+    "verify:registry-install": "node scripts/registry-install-verification.mjs"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-sc": "5.2.8",
+    "portico-ui": "0.1.2",
+    "vue": "^3.5.44",
+    "vue-router": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.6.0",
+    "@vue/tsconfig": "^0.9.1",
+    "jsdom": "^31.0.1",
+    "playwright": "1.49.0",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.1",
+    "vue-tsc": "^3.3.14"
+  }
+}
