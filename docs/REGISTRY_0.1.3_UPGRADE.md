@@ -20,8 +20,8 @@ sha256sum /tmp/portico-ui-0.1.3.tgz
 
 ```bash
 mkdir -p /opt/cursor/artifacts
-NPM_CONFIG_CACHE=/tmp/npm-cache-verify-013-empty npm ci
 ADMIN_GIT_SHA=$(git rev-parse HEAD) npm run verify:registry-install
+# 脚本内：新建空 cache、rm node_modules、npm ci，日志 → registry-install-npm-ci-0.1.3.log
 npm run typecheck && npm test && npm run build:pages && npm run smoke:pages-static
 ```
 

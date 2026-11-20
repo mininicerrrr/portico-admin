@@ -1,15 +1,17 @@
 /**
  * Independent registry install verification for portico-ui@0.1.3.
- * Reference tarball (compare-only) may be supplied via REFERENCE_TARBALL_COMPARE_ONLY — never used to install.
+ * Always performs rm node_modules + npm ci (unless REGISTRY_VERIFY_NO_CI=1, which fails evidence).
  */
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
-import { readFile, writeFile, access } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const ROOT = process.cwd()
 const OUT = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
 const OUT_FILE = path.join(OUT, 'registry-install-verification-0.1.3.json')
+const CI_LOG_FILE = path.join(OUT, 'registry-install-npm-ci-0.1.3.log')
+const PACK_DIR = '/tmp/npm-pack-portico-ui-013'
 
 const APPROVED = {
   tarballSha256: '025aa12d873dbd4bf2c1d40299394598d106b0fcd32833ea9430bba5d0040db4',
@@ -31,18 +33,20 @@ function sh(cmd, env = {}) {
   try {
     return {
       ok: true,
-      stdout: execSync(cmd, {
+      exitCode: 0,
+      combined: execSync(cmd, {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, ...env },
-      }).trim(),
+        maxBuffer: 20 * 1024 * 1024,
+      }),
     }
   } catch (e) {
+    const combined = `${e.stdout?.toString?.() ?? ''}${e.stderr?.toString?.() ?? ''}${e.message ?? ''}`
     return {
       ok: false,
-      stdout: e.stdout?.toString?.() ?? '',
-      stderr: e.stderr?.toString?.() ?? e.message,
-      code: e.status,
+      exitCode: e.status ?? 1,
+      combined,
     }
   }
 }
@@ -64,45 +68,31 @@ async function hashDistDir(distDir) {
   return out
 }
 
-async function referenceCompareOnly() {
-  const refPath = process.env.REFERENCE_TARBALL_COMPARE_ONLY
-  if (!refPath) return { skipped: true, reason: 'REFERENCE_TARBALL_COMPARE_ONLY not set' }
+async function dirEntryCount(dirPath) {
   try {
-    await access(refPath)
+    const entries = await readdir(dirPath)
+    return { exists: true, entryCount: entries.length }
   } catch {
-    return { skipped: true, reason: `reference path missing: ${refPath}` }
-  }
-  const tarballSha256 = await sha256File(refPath)
-  try {
-    const extractDir = `/tmp/portico-ui-ref-${Date.now()}`
-    sh(`mkdir -p ${extractDir}`)
-    sh(`tar -xzf "${refPath}" -C ${extractDir}`)
-    const pkgJson = JSON.parse(await readFile(path.join(extractDir, 'package', 'package.json'), 'utf8'))
-    const distHashes = await hashDistDir(path.join(extractDir, 'package', 'dist'))
-    return {
-      role: 'compare_only_not_install',
-      path: refPath,
-      tarballSha256,
-      matchesApprovedTarballSha256: tarballSha256 === APPROVED.tarballSha256,
-      packageVersion: pkgJson.version,
-      distSha256: distHashes,
-    }
-  } catch (e) {
-    return { role: 'compare_only_not_install', error: String(e) }
+    return { exists: false, entryCount: 0 }
   }
 }
 
-const adminGitSha = process.env.ADMIN_GIT_SHA ?? sh('git rev-parse HEAD').stdout ?? null
+const adminGitSha = process.env.ADMIN_GIT_SHA ?? sh('git rev-parse HEAD').combined.trim()
 
 const npmViewLatest = sh('npm view portico-ui dist-tags.latest version --json')
 const npmView013 = sh('npm view portico-ui@0.1.3 version dist.integrity dist.shasum dist.tarball --json')
 const tarballHead = sh(`curl -sI "${APPROVED.tarballUrl}" | head -n 1`)
-const npmPack = sh('npm pack portico-ui@0.1.3 --pack-destination /tmp/npm-pack-portico-ui-013 2>&1')
+
+await mkdir(PACK_DIR, { recursive: true })
+const npmPack = sh(`npm pack portico-ui@0.1.3 --pack-destination ${PACK_DIR}`)
+let packTarballFilename = null
 let packTarballSha256 = null
 if (npmPack.ok) {
-  const match = npmPack.stdout.match(/portico-ui-[\d.]+\.tgz/)
+  const match = npmPack.combined.trim().match(/portico-ui-[\d.]+\.tgz\s*$/)?.[0]?.trim()
+    ?? npmPack.combined.trim().split('\n').find((l) => l.endsWith('.tgz'))?.trim()
   if (match) {
-    packTarballSha256 = await sha256File(path.join('/tmp/npm-pack-portico-ui-013', match[0]))
+    packTarballFilename = match
+    packTarballSha256 = await sha256File(path.join(PACK_DIR, match))
   }
 }
 
@@ -114,6 +104,46 @@ try {
   lockSlice = { packageJsonDependency: dep, lockEntry: node }
 } catch (e) {
   lockSlice = { error: String(e) }
+}
+
+const cacheDir =
+  process.env.NPM_CONFIG_CACHE ??
+  `/tmp/npm-cache-verify-013-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+await mkdir(cacheDir, { recursive: true })
+const cacheBefore = await dirEntryCount(cacheDir)
+const hadNodeModulesBefore = await dirEntryCount(path.join(ROOT, 'node_modules'))
+
+let npmCiAttempt
+if (process.env.REGISTRY_VERIFY_NO_CI === '1') {
+  npmCiAttempt = {
+    skipped: true,
+    reason: 'REGISTRY_VERIFY_NO_CI=1 — not valid clean-install evidence',
+    exitCode: null,
+    logFile: null,
+  }
+} else {
+  try {
+    await rm(path.join(ROOT, 'node_modules'), { recursive: true, force: true })
+  } catch {
+    /* ok */
+  }
+  const npmCi = sh('npm ci', { NPM_CONFIG_CACHE: cacheDir })
+  await mkdir(OUT, { recursive: true })
+  await writeFile(CI_LOG_FILE, npmCi.combined, 'utf8')
+  const cacheAfter = await dirEntryCount(cacheDir)
+  npmCiAttempt = {
+    skipped: false,
+    command: `NPM_CONFIG_CACHE=${cacheDir} npm ci`,
+    exitCode: npmCi.exitCode,
+    ok: npmCi.ok,
+    logFile: CI_LOG_FILE,
+    logTail: npmCi.combined.slice(-1200),
+    nodeModulesRemovedBefore: true,
+    npmCacheDir: cacheDir,
+    npmCacheBefore: cacheBefore,
+    npmCacheAfter: cacheAfter,
+    hadNodeModulesBeforeCi: hadNodeModulesBefore,
+  }
 }
 
 let installed = null
@@ -130,22 +160,12 @@ try {
       DIST_FILES.map((f) => [f, distSha256[f] === APPROVED.distSha256FromRegistryTarball[f]]),
     ),
   }
-} catch {
-  installed = { missing: true }
+} catch (e) {
+  installed = { missing: true, error: String(e) }
 }
 
-const npmCi = sh('npm ci 2>&1', {
-  NPM_CONFIG_CACHE: process.env.NPM_CONFIG_CACHE ?? '/tmp/npm-cache-verify-013',
-})
-const ciAttemptNote =
-  process.env.SKIP_NPM_CI_IN_VERIFY === '1'
-    ? { skipped: true }
-    : { ok: npmCi.ok, excerpt: (npmCi.stderr ?? npmCi.stdout ?? '').slice(-800) }
-
-const reference = await referenceCompareOnly()
-
 const distMatchesApproved =
-  installed?.distSha256
+  installed?.distSha256 && !installed.missing
     ? Object.fromEntries(
         DIST_FILES.map((f) => [
           f,
@@ -158,42 +178,55 @@ const integrityMatches =
   lockSlice?.lockEntry?.integrity === APPROVED.registryIntegrity &&
   installed?.integrityInLock === APPROVED.registryIntegrity
 
+const cleanCiEvidenceOk =
+  !npmCiAttempt.skipped && npmCiAttempt.ok === true && npmCiAttempt.exitCode === 0
+
 const report = {
   verifiedAt: new Date().toISOString(),
   adminGitSha,
   adminRepo: 'mininicerrrr/portico-admin',
   approved: APPROVED,
   registryReadOnlyChecks: {
-    npmViewLatest: npmViewLatest.ok ? JSON.parse(npmViewLatest.stdout || '{}') : npmViewLatest,
-    npmView013: npmView013.ok ? JSON.parse(npmView013.stdout || '{}') : npmView013,
-    tarballHttpHead: tarballHead.stdout,
-    tarballHttp404: /404/.test(tarballHead.stdout ?? ''),
-    npmPackAttempt: npmPack,
-    npmPackTarballSha256: packTarballSha256,
-    npmPackTarballMatchesApproved: packTarballSha256 === APPROVED.tarballSha256,
+    npmViewLatest: npmViewLatest.ok ? JSON.parse(npmViewLatest.combined || '{}') : npmViewLatest,
+    npmView013: npmView013.ok ? JSON.parse(npmView013.combined || '{}') : npmView013,
+    tarballHttpHead: tarballHead.combined.trim(),
+    tarballHttp404: /404/.test(tarballHead.combined ?? ''),
+    npmPack: {
+      ok: npmPack.ok,
+      exitCode: npmPack.exitCode,
+      packDestination: PACK_DIR,
+      packDestinationCreated: true,
+      tarballFilename: packTarballFilename,
+      tarballSha256: packTarballSha256,
+      tarballMatchesApproved: packTarballSha256 === APPROVED.tarballSha256,
+      outputTail: npmPack.combined.slice(-400),
+    },
   },
   packageLock: lockSlice,
-  npmCiAttempt: ciAttemptNote,
+  npmCiAttempt,
+  cleanInstallEvidenceOk: cleanCiEvidenceOk,
   installedNodeModules: installed,
   integrityMatchesApproved: integrityMatches,
-  referenceTarballCompareOnly: reference,
   distMatchesApproved,
   installBlocked:
+    !cleanCiEvidenceOk ||
     !installed?.version ||
     installed.version !== '0.1.3' ||
-    tarballHead.stdout?.includes('404') ||
-    (distMatchesApproved && !Object.values(distMatchesApproved).every(Boolean)),
+    tarballHead.combined?.includes('404') ||
+    packTarballSha256 !== APPROVED.tarballSha256 ||
+    (distMatchesApproved && !Object.values(distMatchesApproved).every(Boolean)) ||
+    !integrityMatches,
   commandsUsed: [
     'npm view portico-ui@0.1.3',
     `curl -sI ${APPROVED.tarballUrl}`,
-    'npm pack portico-ui@0.1.3',
-    'npm ci (optional)',
-    'REFERENCE_TARBALL_COMPARE_ONLY=… (hash only, not install)',
+    `mkdir -p ${PACK_DIR} && npm pack portico-ui@0.1.3`,
+    `rm -rf node_modules && NPM_CONFIG_CACHE=<fresh> npm ci`,
   ],
   evidenceScope:
-    'Live registry packument + tarball SHA256; node_modules dist bytes must match extracted registry tarball — not candidate tgz install.',
+    'Clean install = fresh npm cache dir + removed node_modules + npm ci exit 0; then dist hash from resulting node_modules only.',
 }
 
+await mkdir(OUT, { recursive: true })
 await writeFile(OUT_FILE, JSON.stringify(report, null, 2))
 console.log(JSON.stringify(report, null, 2))
 process.exit(report.installBlocked ? 2 : 0)
