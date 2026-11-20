@@ -35,7 +35,7 @@ jobs:
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           ./actionlint -color
 
-  pages-preview-smoke:
+  pages-static-host-smoke:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,9 +46,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: VITE_BASE_PATH=/portico-admin/ npm run build
-      - run: cp dist/index.html dist/404.html
+      - run: npm run build:pages
       - run: npx playwright install chromium
-      - run: npm run smoke:pages
+      - run: npm run smoke:pages-static
         env:
           VITE_BASE_PATH: /portico-admin/

@@ -1,6 +1,6 @@
 # Portico Admin
 
-基于 npm 包 [portico-ui](https://www.npmjs.com/package/portico-ui) **0.1.2** 的演示型管理后台（Vue 3 + TypeScript + Vite + vue-router）。本仓库为 MIT 应用代码，**不会**发布到 npm。
+基于 npm 包 [portico-ui](https://www.npmjs.com/package/portico-ui) **0.1.3** 的演示型管理后台（Vue 3 + TypeScript + Vite + vue-router）。本仓库为 MIT 应用代码，**不会**发布到 npm。
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
@@ -28,7 +28,7 @@
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm install` | 安装依赖（固定 `portico-ui@0.1.2`） |
+| `npm install` | 安装依赖（固定 `portico-ui@0.1.3`） |
 | `npm run dev` | 启动开发服务器 |
 | `npm run build` | 生产构建 |
 | `npm run typecheck` | TypeScript 类型检查 |
@@ -75,4 +75,4 @@ MIT — 见 [LICENSE](./LICENSE)。
 
 ## 关联
 
-- 组件库：`portico-ui@0.1.2`（请勿在本应用中修改其源码仓库）。
+- 组件库：`portico-ui@0.1.3`（请勿在本应用中修改其源码仓库）。
