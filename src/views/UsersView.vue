@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import type { TableColumn, TableSortOrder } from 'portico-ui'
 import {
   PtButton,
@@ -34,6 +34,9 @@ function applyUsersListA11yLabels() {
 }
 
 onMounted(() => {
+  nextTick(applyUsersListA11yLabels)
+})
+onActivated(() => {
   nextTick(applyUsersListA11yLabels)
 })
 const sortProp = ref<keyof DemoUser | ''>('')
@@ -87,6 +90,10 @@ const pageData = computed(
 )
 
 const total = computed(() => filteredUsers.value.length)
+
+watch([currentPage, pageSize, total], () => {
+  nextTick(applyUsersListA11yLabels)
+})
 
 function roleLabel(role: UserRole) {
   return role === 'admin' ? '管理员' : role === 'editor' ? '编辑' : '访客'

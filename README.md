@@ -1,6 +1,6 @@
 # Portico Admin
 
-A polished **demo admin shell** for [portico-ui](https://www.npmjs.com/package/portico-ui) `0.1.2` (Vue 3 + TypeScript + Vite + vue-router). It is MIT-licensed application code only — **not** an npm package.
+A polished **demo admin shell** for [portico-ui](https://www.npmjs.com/package/portico-ui) `0.1.3` (Vue 3 + TypeScript + Vite + vue-router). It is MIT-licensed application code only — **not** an npm package.
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
@@ -28,7 +28,7 @@ A polished **demo admin shell** for [portico-ui](https://www.npmjs.com/package/p
 
 | Command | Description |
 | --- | --- |
-| `npm install` | Install dependencies (pins `portico-ui@0.1.2`) |
+| `npm install` | Install dependencies (pins `portico-ui@0.1.3`) |
 | `npm run dev` | Start Vite dev server |
 | `npm run build` | Production build |
 | `npm run typecheck` | `vue-tsc` type check |
@@ -75,4 +75,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ## Related
 
-- UI package: `portico-ui@0.1.2` on npm (do not modify that repo from this app).
+- UI package: `portico-ui@0.1.3` on npm (do not modify that repo from this app).

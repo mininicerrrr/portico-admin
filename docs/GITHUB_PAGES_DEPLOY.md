@@ -48,4 +48,4 @@
 - Vite `base`: `/portico-admin/`（`VITE_BASE_PATH`）
 - Vue Router：`createWebHistory(import.meta.env.BASE_URL)` + SPA `404.html` 回退
 
-依赖仍为 registry **`portico-ui@0.1.2`**（无业务行为变更）。
+依赖仍为 registry **`portico-ui@0.1.3`**（无业务行为变更）。

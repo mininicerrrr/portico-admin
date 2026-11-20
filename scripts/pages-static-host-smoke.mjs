@@ -147,6 +147,36 @@ try {
   const pageSizeValue = await page.getByRole('combobox', { name: '每页条数' }).inputValue()
   usersFilterA11y.interactions.pageSize20 = pageSizeValue === '20'
   if (pageSizeValue !== '20') errors.push(`users page size select expected 20 got ${pageSizeValue}`)
+
+  await page.getByRole('combobox', { name: '每页条数' }).selectOption('50')
+  const afterPageSizeChange = await page.getByRole('combobox', { name: '每页条数' }).count()
+  if (afterPageSizeChange !== 1) {
+    errors.push(`page size combobox name lost after selectOption (count ${afterPageSizeChange})`)
+  }
+  usersFilterA11y.interactions.pageSize50Named = afterPageSizeChange === 1
+
+  await page.getByRole('menuitem', { name: '概览' }).click()
+  await page.waitForURL(/\/portico-admin\/?$|\/$/)
+  await page.getByRole('menuitem', { name: '用户列表' }).click()
+  await page.waitForURL(/users/)
+  await page.waitForSelector('.pt-table', { timeout: 15000 })
+  const namesAfterNav = {}
+  for (const name of distinctComboboxNames) {
+    namesAfterNav[name] = await page.getByRole('combobox', { name }).count()
+    if (namesAfterNav[name] !== 1) {
+      errors.push(`after nav away+back: combobox "${name}" expected 1 got ${namesAfterNav[name]}`)
+    }
+  }
+  usersFilterA11y.comboboxByRoleAfterNav = namesAfterNav
+
+  const editBtn = page.getByRole('button', { name: '编辑' }).first()
+  await editBtn.click()
+  await page.waitForSelector('.pt-drawer.is-visible, .pt-drawer', { timeout: 5000 })
+  const dialogCount = await page.getByRole('dialog').count()
+  usersFilterA11y.drawerDialogVisible = dialogCount >= 1
+  if (dialogCount < 1) errors.push('users edit drawer expected role=dialog in tree')
+  await page.getByRole('button', { name: '取消' }).click()
+
   browserChecks.usersFilterA11y = usersFilterA11y
 
   await page.getByRole('menuitem', { name: '示例表单' }).click()
