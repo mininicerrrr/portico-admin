@@ -116,6 +116,39 @@ try {
   }
 
   await page.goto(`${baseUrl}users`, { waitUntil: 'networkidle' })
+  await page.waitForSelector('.pt-table', { timeout: 15000 })
+
+  const usersFilterA11y = { comboboxByRole: {}, treeComboboxNames: [], interactions: {} }
+  const distinctComboboxNames = ['角色筛选', '状态筛选', '每页条数']
+  for (const name of distinctComboboxNames) {
+    const count = await page.getByRole('combobox', { name }).count()
+    usersFilterA11y.comboboxByRole[name] = count
+    if (count !== 1) errors.push(`users combobox getByRole count for "${name}" expected 1 got ${count}`)
+  }
+  const a11yTree = await page.accessibility.snapshot({ interestingOnly: true })
+  function collectComboboxNames(node, out = []) {
+    if (!node) return out
+    if (node.role === 'combobox') out.push(node.name ?? null)
+    for (const child of node.children || []) collectComboboxNames(child, out)
+    return out
+  }
+  usersFilterA11y.treeComboboxNames = collectComboboxNames(a11yTree)
+  const unnamed = usersFilterA11y.treeComboboxNames.filter((n) => !n)
+  if (unnamed.length) {
+    errors.push(`users accessibility tree has unnamed comboboxes: ${JSON.stringify(usersFilterA11y.treeComboboxNames)}`)
+  }
+  await page.getByRole('combobox', { name: '角色筛选' }).click()
+  await page.getByRole('option', { name: '管理员' }).click()
+  usersFilterA11y.interactions.roleAdmin = true
+  await page.getByRole('combobox', { name: '状态筛选' }).click()
+  await page.getByRole('option', { name: '启用' }).click()
+  usersFilterA11y.interactions.statusActive = true
+  await page.getByRole('combobox', { name: '每页条数' }).selectOption('20')
+  const pageSizeValue = await page.getByRole('combobox', { name: '每页条数' }).inputValue()
+  usersFilterA11y.interactions.pageSize20 = pageSizeValue === '20'
+  if (pageSizeValue !== '20') errors.push(`users page size select expected 20 got ${pageSizeValue}`)
+  browserChecks.usersFilterA11y = usersFilterA11y
+
   await page.getByRole('menuitem', { name: '示例表单' }).click()
   await page.waitForURL(/form-demo/)
   browserChecks.navUsersToForm = page.url()

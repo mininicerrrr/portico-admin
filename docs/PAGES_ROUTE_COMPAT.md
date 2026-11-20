@@ -43,3 +43,9 @@
 **未部署前不对 production 声称 200**；本地静态宿主与 merge+deploy 后线上验收分离。
 
 产物：`pages-static-route-regression.json`。
+
+### 用户列表筛选（P2 a11y，同 PR 独立回归）
+
+`/users` 三个下拉（角色、状态、每页条数）在 Chromium accessibility tree 中须具**互异**可访问名（`getByRole('combobox', { name })`），不与「仅看 `aria-label` DOM 是否为 null」等价。视觉 `<label for>` 不足以命名自定义 `combobox`。
+
+`smoke:pages-static` 在 `/users` 断言三控件名称并做轻量交互（改角色/状态、切换每页 20 条）。

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import type { TableColumn, TableSortOrder } from 'portico-ui'
 import {
   PtButton,
@@ -27,6 +27,15 @@ const roleFilter = ref<UserRole | 'all'>('all')
 const statusFilter = ref<UserStatus | 'all'>('all')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const paginationWrap = ref<HTMLElement | null>(null)
+
+function applyUsersListA11yLabels() {
+  paginationWrap.value?.querySelector<HTMLSelectElement>('.pt-pagination select')?.setAttribute('aria-label', '每页条数')
+}
+
+onMounted(() => {
+  nextTick(applyUsersListA11yLabels)
+})
 const sortProp = ref<keyof DemoUser | ''>('')
 const sortOrder = ref<TableSortOrder>(null)
 
@@ -152,7 +161,13 @@ function saveEdit() {
       </div>
       <div class="filter-field">
         <label class="filter-label" for="user-role">角色</label>
-        <PtSelect id="user-role" v-model="roleFilter" placeholder="全部角色" @change="currentPage = 1">
+        <PtSelect
+          id="user-role"
+          v-model="roleFilter"
+          aria-label="角色筛选"
+          placeholder="全部角色"
+          @change="currentPage = 1"
+        >
           <PtOption label="全部角色" value="all" />
           <PtOption label="管理员" value="admin" />
           <PtOption label="编辑" value="editor" />
@@ -161,7 +176,13 @@ function saveEdit() {
       </div>
       <div class="filter-field">
         <label class="filter-label" for="user-status">状态</label>
-        <PtSelect id="user-status" v-model="statusFilter" placeholder="全部状态" @change="currentPage = 1">
+        <PtSelect
+          id="user-status"
+          v-model="statusFilter"
+          aria-label="状态筛选"
+          placeholder="全部状态"
+          @change="currentPage = 1"
+        >
           <PtOption label="全部状态" value="all" />
           <PtOption label="启用" value="active" />
           <PtOption label="停用" value="inactive" />
@@ -201,7 +222,7 @@ function saveEdit() {
       </template>
     </PtTable>
 
-    <div class="pagination-wrap">
+    <div ref="paginationWrap" class="pagination-wrap">
       <PtPagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
