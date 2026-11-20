@@ -2,13 +2,13 @@
  * Static-host regression: direct GET must be HTTP 200 (no Vite preview SPA fallback).
  */
 import { chromium } from 'playwright'
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { server, port, basePath } from './static-dist-server.mjs'
 
 const baseUrl = `http://127.0.0.1:${port}${basePath}`
-const outDir = process.env.SCREENSHOT_DIR ?? '/opt/cursor/artifacts'
+const outDir = process.env.SCREENSHOT_DIR ?? path.join(process.cwd(), 'pages-static-route-regression')
 
 const ROUTES = [
   { path: '', name: 'dashboard', selector: 'role=menuitem[name="用户列表"]' },
@@ -94,6 +94,7 @@ try {
     },
   }
 
+  await mkdir(outDir, { recursive: true })
   await writeFile(path.join(outDir, 'pages-static-route-regression.json'), JSON.stringify(evidence, null, 2))
   console.log(JSON.stringify(evidence, null, 2))
   if (errors.length) process.exitCode = 1
