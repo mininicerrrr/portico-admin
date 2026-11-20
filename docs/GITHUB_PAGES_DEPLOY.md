@@ -23,7 +23,9 @@
 2. `VITE_BASE_PATH=/portico-admin/` build + `404.html`
 3. `smoke:pages`
 4. `upload-artifact`（dist）
-5. `download-artifact` → `configure-pages` → `upload-pages-artifact` → `deploy-pages` → `page_url`
+5. `npm run build:pages`（含深链 `*/index.html` 静态输出，见 [PAGES_ROUTE_COMPAT.md](./PAGES_ROUTE_COMPAT.md)）
+6. `smoke:pages-static`（无 SPA fallback 的静态宿主升域）
+7. `download-artifact` → `configure-pages` → `upload-pages-artifact` → `deploy-pages` → `page_url`
 
 ## merge 与部署行为
 
