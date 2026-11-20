@@ -36,7 +36,10 @@
 `npm run build:pages` + `npm run smoke:pages-static`：
 
 - `static-dist-server.mjs`（**无** SPA fallback）
-- 每条路由 **fetch GET → 断言 200**
-- Playwright 直接打开、刷新、侧栏导航
+- 每条路由记录 **`firstStatus`**（`redirect: manual`，等同 `curl -I` 首跳）与 **`followed`**（跟随后最终状态）
+- 额外：`users/` 尾斜杠、`?qa=1` query；Playwright **直开 + reload** + 侧栏导航
+- 可选 `PAGES_LIVE_PROBE=1`：只读记录 **github.io** 首跳/最终状态，**不因线上仍 404 而 fail CI**
 
-产物：`pages-static-route-regression.json`（可选写入 `/opt/cursor/artifacts/`）。
+**未部署前不对 production 声称 200**；本地静态宿主与 merge+deploy 后线上验收分离。
+
+产物：`pages-static-route-regression.json`。

@@ -17,11 +17,36 @@ const ROUTES = [
   { path: 'settings', name: 'settings', selector: 'text=外观主题' },
 ]
 
-async function httpGet(pathSuffix) {
-  const url = `${baseUrl}${pathSuffix}`.replace(/([^:]\/)\/+/g, '$1')
+function buildUrl(pathSuffix) {
+  return `${baseUrl}${pathSuffix}`.replace(/([^:]\/)\/+/g, '$1')
+}
+
+/** First response only (no redirect follow) — matches curl -I first hop. */
+async function httpGetFirst(pathSuffix) {
+  const url = buildUrl(pathSuffix)
   const res = await fetch(url, { redirect: 'manual' })
   const bodySnippet = (await res.text()).slice(0, 120)
-  return { url, status: res.status, ok: res.ok, contentType: res.headers.get('content-type'), bodySnippet }
+  return {
+    url,
+    firstStatus: res.status,
+    location: res.headers.get('location'),
+    contentType: res.headers.get('content-type'),
+    bodySnippet,
+  }
+}
+
+/** After following redirects (browser default navigation). */
+async function httpGetFollowed(pathSuffix) {
+  const url = buildUrl(pathSuffix)
+  const res = await fetch(url, { redirect: 'follow' })
+  const bodySnippet = (await res.text()).slice(0, 120)
+  return {
+    requestUrl: url,
+    finalUrl: res.url,
+    finalStatus: res.status,
+    contentType: res.headers.get('content-type'),
+    bodySnippet,
+  }
 }
 
 server.listen(port, '127.0.0.1')
@@ -32,16 +57,46 @@ try {
   const errors = []
   for (const r of ROUTES) {
     const key = r.name
-    httpChecks[key] = await httpGet(r.path)
-    if (httpChecks[key].status !== 200) {
-      errors.push(`${key} direct GET expected 200 got ${httpChecks[key].status} (${httpChecks[key].url})`)
+    const first = await httpGetFirst(r.path)
+    const followed = await httpGetFollowed(r.path)
+    httpChecks[key] = { first, followed }
+    if (first.firstStatus !== 200) {
+      errors.push(`${key} first GET expected 200 got ${first.firstStatus} (${first.url})`)
     }
-    const withQuery = await httpGet(`${r.path}?qa=1`)
-    httpChecks[`${key}?qa=1`] = withQuery
-    if (withQuery.status !== 200) errors.push(`${key}?qa=1 GET ${withQuery.status}`)
+    if (followed.finalStatus !== 200) {
+      errors.push(`${key} followed GET expected 200 got ${followed.finalStatus}`)
+    }
+    const withQuery = await httpGetFirst(`${r.path}?qa=1`)
+    httpChecks[`${key}?qa=1`] = { first: withQuery }
+    if (withQuery.firstStatus !== 200) errors.push(`${key}?qa=1 first GET ${withQuery.firstStatus}`)
   }
-  const unknown = await httpGet('this-route-does-not-exist')
+  if (ROUTES.some((r) => r.path === 'users')) {
+    const slashFirst = await httpGetFirst('users/')
+    const slashFollowed = await httpGetFollowed('users/')
+    httpChecks['users-trailing-slash'] = { first: slashFirst, followed: slashFollowed }
+    if (slashFirst.firstStatus !== 200) {
+      errors.push(`users/ first GET expected 200 got ${slashFirst.firstStatus}`)
+    }
+  }
+  const unknown = await httpGetFirst('this-route-does-not-exist')
   httpChecks.unknown = unknown
+
+  const liveProbe = {}
+  if (process.env.PAGES_LIVE_PROBE === '1') {
+    const liveBase = 'https://mininicerrrr.github.io/portico-admin/'
+    for (const suffix of ['', 'users', 'users/', 'users?qa=1']) {
+      const u = new URL(suffix, liveBase).href
+      const first = await fetch(u, { redirect: 'manual' })
+      const followed = await fetch(u, { redirect: 'follow' })
+      liveProbe[suffix || '/'] = {
+        note: 'read-only; does not fail CI — current production may still 404 before merge+deploy',
+        firstStatus: first.status,
+        location: first.headers.get('location'),
+        finalStatus: followed.status,
+        finalUrl: followed.url,
+      }
+    }
+  }
 
   const browser = await chromium.launch()
   const page = await browser.newPage()
@@ -82,12 +137,17 @@ try {
     baseUrl,
     basePath,
     httpChecks,
+    liveProductionProbe: Object.keys(liveProbe).length ? liveProbe : undefined,
     browserChecks,
     assetPrefix: prefix,
     assetViolations: badAssets,
     errors,
     ok: errors.length === 0,
     compatibilityNote: {
+      regressionScope:
+        'Asserts first-response HTTP status on local static host only — not a claim that github.io already returns 200.',
+      githubPagesTrailingSlash:
+        'Live GitHub Pages may respond 301/302 before 200 for directory URLs; record first vs final separately when probing production.',
       supportedDirectGet200: ROUTES.map((r) => `${basePath}${r.path}`.replace(/\/$/, '') || basePath),
       unknownPaths: 'Static host returns HTTP 404; 404.html may show shell but status stays 404 on GitHub Pages.',
       hashUrls: 'Not used (history mode); old hash bookmarks not supported.',

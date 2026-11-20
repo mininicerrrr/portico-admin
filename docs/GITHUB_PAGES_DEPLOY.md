@@ -4,7 +4,7 @@
 
 | 工作流 | 触发 | 部署 |
 | --- | --- | --- |
-| `ci.yml` | `pull_request`、`push` → `main` | **否**（verify + pages-preview-smoke + actionlint） |
+| `ci.yml` | `pull_request`、`push` → `main` | **否**（verify + pages-static-host-smoke + actionlint） |
 | `pages-deploy.yml` | `push` → `main`（**含 merge 入 main 的 push**）、`workflow_dispatch` | **尝试**（仅 `refs/heads/main`） |
 | `pages-preview-proposal.yml` | 仅 `workflow_dispatch`（历史提案） | **否** |
 
@@ -17,15 +17,25 @@
 
 ## 同 revision 门禁
 
-`deploy` **needs** `build-and-verify`（同一 workflow run、同一 checkout SHA）：
+### `ci.yml`（`pages-static-host-smoke` job，不部署）
+
+1. `npm ci`
+2. `npm run build:pages`（`VITE_BASE_PATH=/portico-admin/` build + `write-pages-spa-routes` + `404.html`，见 [PAGES_ROUTE_COMPAT.md](./PAGES_ROUTE_COMPAT.md)）
+3. `npm run smoke:pages-static`（无 SPA fallback 静态宿主；断言 **first GET** 状态，非 `vite preview`）
+
+### `pages-deploy.yml` — `build-and-verify` 后 `deploy` needs 前者
+
+**build-and-verify**（同 checkout SHA）：
 
 1. `npm ci` → `typecheck` → `test`
-2. `VITE_BASE_PATH=/portico-admin/` build + `404.html`
-3. `smoke:pages`
-4. `upload-artifact`（dist）
-5. `npm run build:pages`（含深链 `*/index.html` 静态输出，见 [PAGES_ROUTE_COMPAT.md](./PAGES_ROUTE_COMPAT.md)）
-6. `smoke:pages-static`（无 SPA fallback 的静态宿主升域）
-7. `download-artifact` → `configure-pages` → `upload-pages-artifact` → `deploy-pages` → `page_url`
+2. `npm run build:pages`
+3. `npm run smoke:pages-static`
+4. `actions/upload-artifact`（dist）
+
+**deploy**（仅 `pages:write` + `id-token:write`）：
+
+1. `actions/download-artifact`
+2. `configure-pages` → `upload-pages-artifact` → `deploy-pages` → `page_url`
 
 ## merge 与部署行为
 
